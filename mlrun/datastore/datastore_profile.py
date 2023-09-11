@@ -37,9 +37,9 @@ class DatastoreProfile(pydantic.BaseModel):
 
     @staticmethod
     def generate_secret_key(profile_name: str, project: str):
-        secret_name_separator = "-__-"
+        secret_name_separator = "_"
         full_key = (
-            "mlrun.datastore-profiles"
+            "mlrun.datastore_profiles"
             + secret_name_separator
             + project
             + secret_name_separator
@@ -184,6 +184,14 @@ def datastore_profile_read(url):
     )
     private_body = get_secret_or_env(project_ds_name_private)
     if not public_profile or not private_body:
+        import os
+
+        print(
+            f"project_ds_name_private='{project_ds_name_private}' public_profile={public_profile}"
+        )
+        for key, value in os.environ.items():
+            print(f"*{key}={value}")
+
         raise mlrun.errors.MLRunInvalidArgumentError(
             f"Unable to retrieve the datastore profile '{url}' from either the server or local environment."
             "Make sure the profile is registered correctly, or if running in a local environment,"

@@ -112,6 +112,7 @@ class Secrets(
         delete_project_secret list_project_secrets won't do any operation on the data and delete_project_secrets won't
         handle cleaning the key map
         """
+        print(f"Storing secrets {secrets} for project {project}")
         secrets_to_store = self._validate_and_enrich_project_secrets_to_store(
             project,
             secrets,

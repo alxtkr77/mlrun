@@ -402,6 +402,7 @@ class K8sHelper(mlrun.common.secrets.SecretProviderInterface):
 
         secret_data = k8s_secret.data.copy()
         for key, value in secrets.items():
+            print(f"K8 Storing secrets {value} for key {key}")
             secret_data[key] = base64.b64encode(value.encode()).decode("utf-8")
 
         k8s_secret.data = secret_data
