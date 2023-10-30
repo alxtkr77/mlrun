@@ -4543,6 +4543,94 @@ class TestFeatureStore(TestMLRunSystem):
         assert offline_features_df.equals(inspect_result)
         assert offline_features_df.equals(expected_result)
 
+    def test_project_export_with_feature_set(self):
+        name = "test_featureset_exp"
+        feature_set = fstore.FeatureSet(
+            name=name,
+            entities=[fstore.Entity("name")],
+        )
+        self.project.get_or_create_feature_set(feature_set, "myfs")
+        with tempfile.TemporaryDirectory() as repo_dir, tempfile.NamedTemporaryFile(
+            suffix=".zip"
+        ) as filename:
+            self.project.context = repo_dir
+            self.project.export(filename.name)
+            new_project = mlrun.load_project(
+                url=filename.name, name="new-test-featureset-export"
+            )
+
+        imported_feature_set = new_project.get_feature_set("myfs")
+        assert imported_feature_set.metadata.project == "new-test-featureset-export"
+        imported_feature_set.metadata.project = feature_set.metadata.project
+        assert feature_set.to_dict() == imported_feature_set.to_dict()
+
+    def test_project_feature_set_get_set_list(self):
+        feature_set1 = fstore.FeatureSet(
+            name="fs1",
+            entities=[fstore.Entity("name1")],
+        )
+        feature_set2 = fstore.FeatureSet(
+            name="fs2",
+            entities=[fstore.Entity("name2")],
+        )
+        feature_set3 = fstore.FeatureSet(
+            name="fs3",
+            entities=[fstore.Entity("name3")],
+        )
+        expected_featuresets = [None] * 4
+        expected_featuresets[0] = self.project.get_or_create_feature_set(feature_set1)
+        expected_featuresets[1] = self.project.set_feature_set(feature_set2)
+        expected_featuresets[2] = self.project.set_feature_set(feature_set3)
+        expected_featuresets[3] = self.project.set_feature_set(feature_set3, tag="v1")
+        with tempfile.TemporaryDirectory() as repo_dir, tempfile.NamedTemporaryFile(
+            suffix=".zip"
+        ) as filename:
+            self.project.context = repo_dir
+            self.project.export(filename.name)
+            new_project = mlrun.load_project(
+                url=filename.name, name="new-test-featureset-export"
+            )
+            fs_list = new_project.list_feature_sets()
+            orig_list = [k.to_dict() for k in sorted(fs_list, key=lambda x: x.fullname)]
+            new_list = [
+                m.to_dict()
+                for m in sorted(expected_featuresets, key=lambda x: x.fullname)
+            ]
+            for k in orig_list:
+                k["metadata"].pop("updated", None)
+                k["metadata"].pop("project", None)
+            for k in new_list:
+                k["metadata"].pop("updated", None)
+                k["metadata"].pop("project", None)
+            assert orig_list == new_list
+
+    def test_project_feature_set_delete(self):
+        feature_set1 = fstore.FeatureSet(
+            name="fs1",
+            entities=[fstore.Entity("name1")],
+        )
+        feature_set2 = fstore.FeatureSet(
+            name="fs2",
+            entities=[fstore.Entity("name2")],
+        )
+        feature_set3 = fstore.FeatureSet(
+            name="fs3",
+            entities=[fstore.Entity("name3")],
+        )
+        self.project.get_or_create_feature_set(feature_set1)
+        self.project.set_feature_set(feature_set2)
+        self.project.set_feature_set(feature_set3)
+        self.project.set_feature_set(feature_set3, tag="v1")
+        self.project.set_feature_set(feature_set3, tag="v2")
+
+        self.project.delete_feature_set("fs3:v1")
+        fs_list = self.project.list_feature_sets()
+        assert len(fs_list) == 4
+
+        self.project.delete_feature_set("fs3")
+        fs_list = self.project.list_feature_sets()
+        assert len(fs_list) == 2
+
 
 def verify_purge(fset, targets):
     fset.reload(update_spec=False)

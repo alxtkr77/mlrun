@@ -383,6 +383,26 @@ class FeatureSet(ModelObj):
     def spec(self) -> FeatureSetSpec:
         return self._spec
 
+    @staticmethod
+    def parse_name_and_tag(name: str, tag: str = None, default_tag: str = "latest"):
+        name = mlrun.utils.normalize_name(name) if name else name
+        untagged_name = name
+        # validate tag in name if specified
+        if len(split_name := name.split(":")) == 2:
+            untagged_name, name_tag = split_name
+            if tag and name_tag and tag != name_tag:
+                raise ValueError(
+                    f"Tag parameter ({tag}) and tag in name ({name}) must match"
+                )
+
+            tag = tag or name_tag
+        elif len(split_name) > 2:
+            raise ValueError(
+                f"The name ({name}) must be in the format <name>:<tag> or <name>"
+            )
+        tag = tag or default_tag
+        return untagged_name, tag
+
     @spec.setter
     def spec(self, spec):
         self._spec = self._verify_dict(spec, "spec", FeatureSetSpec)
@@ -956,10 +976,12 @@ class FeatureSet(ModelObj):
         )
         return result
 
-    def save(self, tag="", versioned=False):
+    def save(self, tag="", versioned=False, project=None):
         """save to mlrun db"""
         db = self._get_run_db()
-        self.metadata.project = self.metadata.project or mlconf.default_project
+        self.metadata.project = (
+            project or self.metadata.project or mlconf.default_project
+        )
         tag = tag or self.metadata.tag or "latest"
         as_dict = self.to_dict()
         as_dict["spec"]["features"] = as_dict["spec"].get(

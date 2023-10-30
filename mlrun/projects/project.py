@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import datetime
 import getpass
 import glob
@@ -43,6 +44,7 @@ import mlrun.common.schemas.model_monitoring
 import mlrun.common.schemas.model_monitoring.constants as mm_constants
 import mlrun.db
 import mlrun.errors
+import mlrun.feature_store
 import mlrun.runtimes
 import mlrun.runtimes.pod
 import mlrun.runtimes.utils
@@ -198,10 +200,10 @@ def new_project(
         elif from_template.startswith("git://"):
             clone_git(from_template, context, secrets, clone=True)
             shutil.rmtree(path.join(context, ".git"))
-            project = _load_project_dir(context, name)
+            project, featuresets = _load_project_dir(context, name)
         elif from_template.endswith(".zip"):
             clone_zip(from_template, context, secrets)
-            project = _load_project_dir(context, name)
+            project, featuresets = _load_project_dir(context, name)
         else:
             raise ValueError("template must be a path to .yaml or .zip file")
         project.metadata.name = name
@@ -365,7 +367,7 @@ def load_project(
         repo, url = init_repo(context, url, init_git)
 
     if not project:
-        project = _load_project_dir(context, name, subpath)
+        project, featuresets = _load_project_dir(context, name, subpath)
 
     if not project.metadata.name:
         raise ValueError("project name must be specified")
@@ -391,7 +393,10 @@ def load_project(
 
     to_save = bool(save and mlrun.mlconf.dbpath)
     if to_save:
-        project.save()
+        project.save_to_db()
+        for fs in featuresets:
+            fs.save()
+        project.export()
 
     # Hook for initializing the project using a project_setup script
     project = project.setup(to_save)
@@ -579,8 +584,19 @@ def _run_project_setup(
 
 
 def _load_project_dir(context, name="", subpath=""):
+    featuresets = []
     subpath_str = subpath or ""
     fpath = path.join(context, subpath_str, "project.yaml")
+    featureset_path = pathlib.Path(path.join(context, subpath_str, "featuresets"))
+    for fs_file_path in featureset_path.iterdir():
+        if fs_file_path.is_file():
+            with open(fs_file_path) as fp:
+                data = fp.read()
+                struct = yaml.load(data, Loader=yaml.FullLoader)
+                featureset = mlrun.feature_store.FeatureSet.from_dict(struct)
+                featureset.metadata.project = name
+                featuresets.append(featureset)
+
     setup_file_path = path.join(context, subpath_str, "project_setup.py")
     if path.isfile(fpath):
         with open(fpath) as fp:
@@ -612,7 +628,7 @@ def _load_project_dir(context, name="", subpath=""):
     project.spec.context = context
     project.metadata.name = name or project.metadata.name
     project.spec.subpath = subpath
-    return project
+    return project, featuresets
 
 
 def _add_username_to_project_name_if_needed(name, user_project):
@@ -718,6 +734,7 @@ class ProjectSpec(ModelObj):
         default_image=None,
         build=None,
         custom_packagers: typing.List[typing.Tuple[str, bool]] = None,
+        feature_sets=None,
     ):
         self.repo = None
 
@@ -747,6 +764,7 @@ class ProjectSpec(ModelObj):
 
         self._function_objects = {}
         self._function_definitions = {}
+        self._featureset_references = set(feature_sets) if feature_sets else set()
         self.functions = functions or []
         self.disable_auto_mount = disable_auto_mount
         self.default_image = default_image
@@ -834,6 +852,23 @@ class ProjectSpec(ModelObj):
         if name in self._function_definitions:
             del self._function_definitions[name]
 
+    ###
+    @property
+    def feature_sets(self) -> list:
+        return list(self._featureset_references)
+
+    @feature_sets.setter
+    def feature_sets(self, featuresets):
+        featuresets = set(featuresets) if featuresets else set()
+        self._featureset_references = featuresets
+
+    def set_feature_set(self, name):
+        self._featureset_references.add(name)
+
+    def remove_feature_set(self, name):
+        self._featureset_references.discard(name)
+
+    ###
     @property
     def workflows(self) -> typing.List[dict]:
         """
@@ -1594,6 +1629,148 @@ class MlrunProject(ModelObj):
         )
         return item
 
+    def get_feature_set(
+        self,
+        name: str = "",
+        tag: str = "latest",
+    ) -> mlrun.feature_store.FeatureSet:
+
+        """Get a featureset object attached to the project
+
+        :param name:                Name of the featureset (under the project), can be specified with a tag to support
+                                    Versions (e.g. myfs:v1). If the `tag` parameter is provided, the tag in the name
+                                    must match the tag parameter.
+                                    Specifying a tag in the name will update the project's tagged featureset (myfs:v1)
+        :param tag:                 featureset version tag to set (none for current or 'latest')
+                                    Specifying a tag as a parameter will update the project's tagged function
+                                    (myfs:v1) and the untagged featureset (myfs)
+        """
+        untagged_name, tag = mlrun.feature_store.FeatureSet().parse_name_and_tag(
+            name, tag
+        )
+        if f"{untagged_name}:{tag}" in self.featuresets:
+            fs = mlrun.feature_store.FeatureSet()
+            fs.metadata.project = self.name
+            fs.metadata.name = untagged_name
+            fs.metadata.tag = tag
+            fs.reload()
+            return fs
+        else:
+            raise ValueError(
+                f"{name}:{tag} featurset is not associated with the project.Use project.set_feature_set() first"
+            )
+
+    def get_or_create_feature_set(
+        self,
+        featureset: mlrun.feature_store.FeatureSet = None,
+        name: str = "",
+        tag: str = "",
+    ) -> mlrun.feature_store.FeatureSet:
+        if featureset:
+            name = name or featureset.metadata.name
+            tag = tag or featureset.metadata.tag
+
+        try:
+            return self.get_feature_set(name, tag)
+        except Exception:
+            return self.set_feature_set(featureset, name, tag)
+
+    def list_feature_sets(
+        self,
+        name: str = None,
+        tag: str = None,
+        state: str = None,
+        entities: List[str] = None,
+        features: List[str] = None,
+        labels: List[str] = None,
+        partition_by: Union[
+            mlrun.common.schemas.FeatureStorePartitionByField, str
+        ] = None,
+        rows_per_partition: int = 1,
+        partition_sort_by: Union[mlrun.common.schemas.SortField, str] = None,
+        partition_order: Union[
+            mlrun.common.schemas.OrderType, str
+        ] = mlrun.common.schemas.OrderType.desc,
+    ) -> List[dict]:
+        result_candidates = mlrun.db.get_run_db().list_feature_sets(
+            self.name,
+            name,
+            tag,
+            state,
+            entities,
+            features,
+            labels,
+            partition_by,
+            rows_per_partition,
+            partition_sort_by,
+            partition_order,
+        )
+        result = []
+        for k in result_candidates:
+            tag = k.metadata.tag or "latest"
+            if f"{k.metadata.name}:{tag}" in self.spec.feature_sets:
+                result.append(k)
+        return result
+
+    def delete_feature_set(self, name, tag=None):
+        untagged_name, tag = mlrun.feature_store.FeatureSet().parse_name_and_tag(
+            name, tag, None
+        )
+        if tag:
+            self.spec.remove_feature_set(f"{untagged_name}:{tag}")
+        else:
+            self.spec.feature_sets = {
+                x
+                for x in self.spec.feature_sets
+                if not x.startswith(f"{untagged_name}:")
+            }
+        mlrun.db.get_run_db().delete_feature_set(untagged_name, self.name, tag)
+
+    def set_feature_set(
+        self,
+        featureset: mlrun.feature_store.FeatureSet = None,
+        name: str = "",
+        tag: str = "",
+    ) -> mlrun.feature_store.FeatureSet:
+        """Associate featureset object reference (its name and tag) to the project.
+                                    If the featureset is not none, it is also saved to the database
+        :param featureset:          featureset object (Optional).
+        :param name:                Name of the featureset (under the project), can be specified with a tag to support
+                                    Versions (e.g. myfs:v1). If the `tag` parameter is provided, the tag in the name
+                                    must match the tag parameter.
+                                    Specifying a tag in the name will update the project's tagged featureset (myfs:v1)
+        :param tag:                 featureset version tag to set (none for current or 'latest')
+                                    Specifying a tag as a parameter will update the project's tagged function
+                                    (myfs:v1) and the untagged featureset (myfs)
+
+        """
+
+        untagged_name, tag = mlrun.feature_store.FeatureSet().parse_name_and_tag(
+            name, tag
+        )
+
+        project = self.name
+
+        if featureset:
+            featureset = copy.deepcopy(featureset)
+            tag = tag or featureset.metadata.tag
+            featureset.metadata.tag = tag
+            featureset.metadata.name = untagged_name or featureset.metadata.name
+            featureset.metadata.project = project
+            featureset.save()
+        else:
+            featureset = mlrun.feature_store.FeatureSet()
+            featureset.metadata.tag = tag
+            featureset.metadata.name = untagged_name
+            featureset.metadata.project = project
+            # Make sure the featureset exists
+            featureset.reload()
+
+        self.spec.set_feature_set(
+            f"{featureset.metadata.name}:{featureset.metadata.tag}"
+        )
+        return featureset
+
     def log_model(
         self,
         key,
@@ -1755,9 +1932,11 @@ class MlrunProject(ModelObj):
         """
         context = context or self.spec.context
         if context:
-            project = _load_project_dir(context, self.metadata.name, self.spec.subpath)
+            project, featuresets = _load_project_dir(
+                context, self.metadata.name, self.spec.subpath
+            )
         else:
-            project = _load_project_file(
+            project, featuresets = _load_project_file(
                 self.spec.origin_url, self.metadata.name, self._secrets
             )
         project.spec.source = self.spec.source
@@ -2673,6 +2852,21 @@ class MlrunProject(ModelObj):
             )
         project_dir = pathlib.Path(project_file_path).parent
         project_dir.mkdir(parents=True, exist_ok=True)
+
+        if len(self.spec.feature_sets):
+            featureset_dir = project_dir / "featuresets"
+            featureset_dir.mkdir(parents=True, exist_ok=True)
+            for fsname in self.spec.feature_sets:
+                name, tag = fsname.split(":")
+                fs = mlrun.feature_store.FeatureSet()
+                fs.metadata.name = name
+                fs.metadata.project = self.name
+                fs.metadata.tag = tag
+                fs.reload()
+                fs_export_filename = f"{featureset_dir}/{name}_{tag}.yaml"
+                with open(fs_export_filename, "w") as fp:
+                    fp.write(fs.to_yaml())
+
         with open(project_file_path, "w") as fp:
             fp.write(self.to_yaml())
 

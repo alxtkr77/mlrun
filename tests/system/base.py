@@ -161,6 +161,8 @@ class TestMLRunSystem:
                 if env_var not in env or env[env_var] is None:
                     configured = False
 
+        configured = True
+
         return pytest.mark.skipif(
             not configured,
             reason=f"This is a system test, add the needed environment variables {*mandatory_env_vars,} "
