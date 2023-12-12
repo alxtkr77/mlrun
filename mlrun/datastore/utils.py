@@ -30,6 +30,8 @@ def store_path_to_spark(path):
             path = url.path
     elif path.startswith("v3io:///"):
         path = "v3io:" + path[len("v3io:/") :]
+    elif path.startswith("az://"):
+        path = "wasb:" + path[len("az:") :]
     elif path.startswith("s3://"):
         if path.startswith("s3:///"):
             # 's3:///' not supported since mlrun 0.9.0 should use s3:// instead
