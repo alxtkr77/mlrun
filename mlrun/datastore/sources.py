@@ -41,11 +41,26 @@ from .utils import (
 )
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def load_spark_dataframe_with_options(session, spark_options, format=None):
     original_hadoop_conf = {}
     hadoop_conf = session.sparkContext._jsc.hadoopConfiguration()
     non_hadoop_spark_options = {}
 
+    print(f"spark_options = {spark_options}")
     for key, value in spark_options.items():
         if key.startswith("spark.hadoop."):
             key = key[len("spark.hadoop.") :]
@@ -56,6 +71,7 @@ def load_spark_dataframe_with_options(session, spark_options, format=None):
         else:
             non_hadoop_spark_options[key] = value
     try:
+        print(f"non_hadoop_spark_options = {non_hadoop_spark_options}")
         if format:
             df = session.read.format(format).load(**non_hadoop_spark_options)
         else:
@@ -223,6 +239,7 @@ class CSVSource(BaseSourceDriver):
         )
 
     def get_spark_options(self):
+        print(f"in get_spark_options(): self.path = {self.path}")
         if self.path and self.path.startswith("ds://"):
             store, path = mlrun.store_manager.get_or_create_store(self.path)
             path = store.url + path
@@ -232,6 +249,7 @@ class CSVSource(BaseSourceDriver):
                 "header": "true",
                 "inferSchema": "true",
             }
+
             storage_spark_options = store.get_spark_options()
             return {**result, **storage_spark_options}
         else:

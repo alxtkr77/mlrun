@@ -198,6 +198,7 @@ class StoreManager:
                 secrets = merge(secrets, datastore_profile.secrets())
             else:
                 secrets = secrets or datastore_profile.secrets()
+            print(f"in get_or_create_store(): secrets = {secrets}")
             url = datastore_profile.url(subpath)
             schema, endpoint, parsed_url = parse_url(url)
             subpath = parsed_url.path
