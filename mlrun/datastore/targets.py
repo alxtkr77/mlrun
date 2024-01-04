@@ -86,6 +86,7 @@ def write_spark_dataframe_with_options(spark_options, df, mode):
     non_hadoop_spark_options = {}
 
     hadoop_conf = sc._jsc.hadoopConfiguration()
+    print(f"KAKAKAKAKA {spark_options}")
 
     for key, value in spark_options.items():
         if key.startswith("spark.hadoop."):

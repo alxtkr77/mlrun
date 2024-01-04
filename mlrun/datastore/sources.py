@@ -45,7 +45,7 @@ def load_spark_dataframe_with_options(session, spark_options, format=None):
     original_hadoop_conf = {}
     hadoop_conf = session.sparkContext._jsc.hadoopConfiguration()
     non_hadoop_spark_options = {}
-
+    print(f"KUKUKUKUKUKUKU {spark_options}")
     for key, value in spark_options.items():
         if key.startswith("spark.hadoop."):
             key = key[len("spark.hadoop.") :]

@@ -74,6 +74,7 @@ class SparkHadoopTestBase(TestMLRunSystem):
         cls.remote_function_name = (
             "remote-spark-default-image-deploy-temp-" + test_suite_name
         )
+        cls.spark_service_name = "dummy-spark-" + test_suite_name
         cls.pq_source = "testdata.parquet"
         cls.pq_target = "testdata_target"
 
@@ -99,7 +100,8 @@ class SparkHadoopTestBase(TestMLRunSystem):
             if additional_pip_pacakges:
                 sj.spec.build.commands = [f"pip install {additional_pip_pacakges}"]
             sj.spec.build.image = RemoteSparkRuntime.default_image
-            sj.with_spark_service(spark_service="dummy-spark-azure")
+            sj.with_spark_service(spark_service=cls.spark_service_name)
+            sj.spec.image_pull_policy = "Always"
             sj.deploy(with_mlrun=False)
             get_run_db().delete_function(name=sj.metadata.name)
             cls.spark_image_deployed = True
