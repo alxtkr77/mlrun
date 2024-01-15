@@ -34,6 +34,7 @@ class SparkFeatureMerger(BaseMerger):
         self._pandas_df = None
 
     def to_spark_df(self, session, path):
+        print(f"merger: to_spark_df {path}")
         return session.read.load(path)
 
     def _unpersist_df(self, df):
@@ -196,6 +197,7 @@ class SparkFeatureMerger(BaseMerger):
 
     @classmethod
     def get_default_image(cls, kind):
+        print(f"merger: get_default_image {kind}")
         if kind == Spark3Runtime.kind:
             return Spark3Runtime._get_default_deployed_mlrun_image_name(with_gpu=False)
         elif kind == RemoteSparkRuntime.kind:
@@ -207,6 +209,7 @@ class SparkFeatureMerger(BaseMerger):
         from pyspark.sql import SparkSession
 
         if self.spark is None:
+            print("merger: _create_engine_env new spark session")
             # create spark context
             self.spark = SparkSession.builder.appName(
                 f"vector-merger-{self.vector.metadata.name}"
@@ -230,6 +233,9 @@ class SparkFeatureMerger(BaseMerger):
             source_kind = feature_set.spec.source.kind
             source_path = feature_set.spec.source.path
             source_kwargs.update(feature_set.spec.source.attributes)
+            print(
+                f"merger: _get_engine_df passthrough {source_path} source_kwargs {source_kwargs}"
+            )
         else:
             target = get_offline_target(feature_set)
             if not target:
@@ -238,6 +244,7 @@ class SparkFeatureMerger(BaseMerger):
                 )
             source_kind = target.kind
             source_path = target.get_target_path()
+            print(f"merger: _get_engine_df passthrough {source_path} {target}")
 
         # handling case where there are multiple feature sets and user creates vector where
         # entity_timestamp_column is from a specific feature set (can't be entity timestamp)

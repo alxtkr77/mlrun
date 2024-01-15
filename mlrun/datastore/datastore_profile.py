@@ -394,6 +394,7 @@ def datastore_profile_read(url):
         public_json=DatastoreProfile2Json.get_json_public(public_profile),
         private_json=private_body,
     )
+    print(f"=====Read datastore {url}, {datastore}")
     return datastore
 
 

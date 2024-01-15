@@ -87,6 +87,10 @@ def write_spark_dataframe_with_options(spark_options, df, mode):
 
     hadoop_conf = sc._jsc.hadoopConfiguration()
 
+    print("---Writing spark frame with options:")
+    for key, value in spark_options.items():
+        print(f"     {key}-{value}")
+
     for key, value in spark_options.items():
         if key.startswith("spark.hadoop."):
             key = key[len("spark.hadoop.") :]
