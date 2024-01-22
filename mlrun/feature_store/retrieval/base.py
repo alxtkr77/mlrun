@@ -90,16 +90,19 @@ class BaseMerger(abc.ABC):
         order_by=None,
     ):
         self._target = target
+        print(f"^^^BaseMerger start...", flush=False)
 
         # calculate the index columns and columns we need to drop
         self._drop_columns = drop_columns or self._drop_columns
         if self.vector.spec.with_indexes or with_indexes:
             self._drop_indexes = False
+        print(f"^^^BaseMerger start 2...", flush=False)
 
         # retrieve the feature set objects/fields needed for the vector
         feature_set_objects, feature_set_fields = self.vector.parse_features(
             update_stats=update_stats
         )
+        print(f"^^^BaseMerger start 3...", flush=False)
         if len(feature_set_fields) == 0:
             raise mlrun.errors.MLRunInvalidArgumentError(
                 "No features in vector. Make sure to infer the schema on all the feature sets first"
@@ -112,17 +115,21 @@ class BaseMerger(abc.ABC):
         if self._drop_indexes and entity_timestamp_column:
             self._append_drop_column(entity_timestamp_column)
 
+        print(f"^^^BaseMerger start 4...", flush=False)
         for feature_set in feature_set_objects.values():
             if self._drop_indexes:
                 self._append_drop_column(feature_set.spec.timestamp_key)
             for key in feature_set.spec.entities.keys():
                 self._append_index(key)
 
+        print(f"^^^BaseMerger start 5...", flush=False)
         start_time = str_to_timestamp(start_time)
         end_time = str_to_timestamp(end_time)
         if start_time and not end_time:
             # if end_time is not specified set it to now()
             end_time = pd.Timestamp.now()
+
+        print(f"^^^BaseMerger start 6...", flush=False)
 
         return self._generate_offline_vector(
             entity_rows,
@@ -188,6 +195,7 @@ class BaseMerger(abc.ABC):
         order_by=None,
     ):
         self._create_engine_env()
+        print(f"^^^_generate_offline_vector start...", flush=False)
 
         feature_sets = []
         dfs = []

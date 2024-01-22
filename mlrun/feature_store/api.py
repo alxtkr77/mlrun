@@ -1076,7 +1076,12 @@ def _ingest_with_spark(
                 .config("spark.sql.session.timeZone", "UTC")
                 .getOrCreate()
             )
+            spark.sparkContext.setLogLevel("TRACE")
             created_spark_context = True
+            print(
+                f"^^^_ingest_with_spark::_create_engine_env {session_name},  {hex(id(spark))}"
+            )
+
 
         timestamp_key = featureset.spec.timestamp_key
 

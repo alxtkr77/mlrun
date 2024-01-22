@@ -45,6 +45,7 @@ from .utils import (
 def load_spark_dataframe_with_options(session, spark_options, format=None):
     original_hadoop_conf = {}
     hadoop_conf = session.sparkContext._jsc.hadoopConfiguration()
+    print(f"^^^load_spark_dataframe_with_options:: {hex(id(session))} format={format}", flush=False)
     non_hadoop_spark_options = {}
 
     for key, value in spark_options.items():
@@ -53,7 +54,14 @@ def load_spark_dataframe_with_options(session, spark_options, format=None):
             # Save the original configuration
             original_value = hadoop_conf.get(key, None)
             original_hadoop_conf[key] = original_value
+            hadoop_conf.unset(key)
             hadoop_conf.set(key, value)
+            updated_value = hadoop_conf.get(key)
+            if updated_value != value:
+                raise mlrun.errors.MLRunInvalidArgumentError(f"Failed to update hadoop key {key}")
+            print(
+                f"^^^load_spark_dataframe_with_options::set {key}->{value} {hex(id(session))}", flush=False
+            )
         else:
             non_hadoop_spark_options[key] = value
     try:
@@ -67,7 +75,13 @@ def load_spark_dataframe_with_options(session, spark_options, format=None):
         for key, value in original_hadoop_conf.items():
             if value:
                 hadoop_conf.set(key, value)
+                print(
+                    f"^^^load_spark_dataframe_with_options::set {key}<-{value} {hex(id(session))}", flush=False
+                )
             else:
+                print(
+                    f"^^^load_spark_dataframe_with_options::unset {key} {hex(id(session))}", flush=False
+                )
                 hadoop_conf.unset(key)
     return df
 

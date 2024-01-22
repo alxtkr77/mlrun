@@ -28,12 +28,16 @@ class SparkFeatureMerger(BaseMerger):
     support_offline = True
 
     def __init__(self, vector, **engine_args):
+        print(f"^^^SparkFeatureMerger::SparkFeatureMerger {engine_args}", flush=False)
         super().__init__(vector, **engine_args)
         self.spark = engine_args.get("spark", None)
+        print(f"^^^SparkFeatureMerger::SparkFeatureMerger {self.spark}", flush=False)
         self.named_view = engine_args.get("named_view", False)
+        print(f"^^^SparkFeatureMerger::SparkFeatureMerger {self.named_view}", flush=False)
         self._pandas_df = None
 
     def to_spark_df(self, session, path):
+        print(f"^^^SparkFeatureMerger::to_spark_df {path}  {hex(id(session))}", flush=False)
         return session.read.load(path)
 
     def _unpersist_df(self, df):
@@ -211,6 +215,10 @@ class SparkFeatureMerger(BaseMerger):
             self.spark = SparkSession.builder.appName(
                 f"vector-merger-{self.vector.metadata.name}"
             ).getOrCreate()
+            self.spark.sparkContext.setLogLevel("TRACE")
+            print(
+                f"^^^SparkFeatureMerger::_create_engine_env vector-merger-{self.vector.metadata.name},  {hex(id(self.spark))}", flush=False
+            )
 
     def _get_engine_df(
         self,

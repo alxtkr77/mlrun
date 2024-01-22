@@ -83,6 +83,7 @@ def write_spark_dataframe_with_options(spark_options, df, mode):
 
     original_hadoop_conf = {}
     non_hadoop_spark_options = {}
+    print(f"^^^write_spark_dataframe_with_options:: {hex(id(df.sql_ctx.sparkSession))}", flush=False)
 
     hadoop_conf = sc._jsc.hadoopConfiguration()
 
@@ -92,7 +93,15 @@ def write_spark_dataframe_with_options(spark_options, df, mode):
             # Save the original configuration
             original_value = hadoop_conf.get(key, None)
             original_hadoop_conf[key] = original_value
+            hadoop_conf.unset(key)
             hadoop_conf.set(key, value)
+            updated_value = hadoop_conf.get(key)
+            if updated_value != value:
+                raise mlrun.errors.MLRunInvalidArgumentError(f"Failed to update hadoop key {key}")
+
+            print(
+                f"^^^write_spark_dataframe_with_options::set {key}->{value} {hex(id(df.sql_ctx.sparkSession))}", flush=False
+            )
         else:
             non_hadoop_spark_options[key] = value
     try:
@@ -103,7 +112,13 @@ def write_spark_dataframe_with_options(spark_options, df, mode):
         for key, value in original_hadoop_conf.items():
             if value:
                 hadoop_conf.set(key, value)
+                print(
+                    f"^^^write_spark_dataframe_with_options::set {key}<-{value} {hex(id(df.sql_ctx.sparkSession))}", flush=False
+                )
             else:
+                print(
+                    f"^^^write_spark_dataframe_with_options::unset {key} {hex(id(df.sql_ctx.sparkSession))}", flush=False
+                )
                 hadoop_conf.unset(key)
 
 
