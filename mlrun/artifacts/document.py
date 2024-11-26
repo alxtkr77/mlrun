@@ -1,3 +1,17 @@
+# Copyright 2024 Iguazio
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import ast
 import re
 import tempfile
@@ -78,9 +92,9 @@ class DocumentLoader:
 
     def __new__(
         cls,
-        artifact_key: str,
         source_path: str,
         loader_spec: "DocumentLoaderSpec",
+        artifact_key="doc%%",
         producer: Optional[Union["MlrunProject", str, "MLClientCtx"]] = None,  # noqa: F821
         upload: bool = False,
     ):
@@ -92,9 +106,9 @@ class DocumentLoader:
                 self,
                 source_path,
                 loader_spec,
-                artifact_key="%%",
-                producer=None,
-                upload=False,
+                artifact_key,
+                producer,
+                upload,
             ):
                 self.producer = producer
                 self.artifact_key = (

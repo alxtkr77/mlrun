@@ -1901,8 +1901,8 @@ class MlrunProject(ModelObj):
         :param key: Artifact key
         :param target_path: Path to the local file
         :param artifact_path: Target path for artifact storage
+        :param document_loader: Spec to use to load the artifact as langchain document
         :param tag: Version tag
-        :param format: Document format (e.g., "txt", "pdf")
         :param upload: Whether to upload the artifact
         :param labels: Key-value labels
         :param kwargs: Additional keyword arguments
