@@ -39,7 +39,7 @@ class VectorStoreCollection:
             Adds a list of DocumentArtifact objects to the collection, optionally using a splitter to convert
             artifacts to documents.
 
-        remove_itself_from_artifact(artifact: DocumentArtifact):
+        remove_from_artifact(artifact: DocumentArtifact):
             Removes the current object from the given artifact's collection and updates the artifact.
 
         delete_artifacts(artifacts: list[DocumentArtifact]):
@@ -137,7 +137,7 @@ class VectorStoreCollection:
             all_ids.extend(ids)
         return all_ids
 
-    def remove_itself_from_artifact(self, artifact: DocumentArtifact):
+    def remove_from_artifact(self, artifact: DocumentArtifact):
         """
         Remove the current object from the given artifact's collection and update the artifact.
 

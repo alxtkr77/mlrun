@@ -74,7 +74,7 @@ class DocumentLoaderSpec(ModelObj):
         return loader
 
 
-class DocumentLoader:
+class MLRunLoader:
     """
     A factory class for creating instances of a dynamically defined document loader.
 
@@ -112,7 +112,7 @@ class DocumentLoader:
             ):
                 self.producer = producer
                 self.artifact_key = (
-                    DocumentLoader.artifact_key_instance(artifact_key, source_path)
+                    MLRunLoader.artifact_key_instance(artifact_key, source_path)
                     if "%%" in artifact_key
                     else artifact_key
                 )
@@ -195,12 +195,15 @@ class DocumentArtifact(Artifact):
         def __init__(
             self,
             *args,
+            document_loader=None,
+            collections=None,
+            original_source=None,
             **kwargs,
         ):
             super().__init__(*args, **kwargs)
-            self.document_loader = None
-            self.collections = set()
-            self.original_source = None
+            self.document_loader = document_loader
+            self.collections = collections if collections is not None else {}
+            self.original_source = original_source
 
     """
     A specific artifact class inheriting from generic artifact, used to maintain Document meta-data.
@@ -216,14 +219,17 @@ class DocumentArtifact(Artifact):
 
     def __init__(
         self,
-        key=None,
-        document_loader: DocumentLoaderSpec = DocumentLoaderSpec(),
+        key,
+        original_source: Optional[str] = None,
+        document_loader: Optional[DocumentLoaderSpec] = None,
         **kwargs,
     ):
         super().__init__(key, **kwargs)
-        self.spec.document_loader = document_loader.to_str()
-        if "src_path" in kwargs:
-            self.spec.original_source = kwargs["src_path"]
+        # Can be also passed via spec
+        self.spec.document_loader = (
+            document_loader.to_str() if document_loader else self.spec.document_loader
+        )
+        self.spec.original_source = original_source or self.spec.original_source
 
     @property
     def spec(self) -> DocumentArtifactSpec:
@@ -234,17 +240,8 @@ class DocumentArtifact(Artifact):
         self._spec = self._verify_dict(
             spec, "spec", DocumentArtifact.DocumentArtifactSpec
         )
-        # _verify_dict doesn't handle set, so we need to convert it back
-        if isinstance(self._spec.collections, str):
-            self._spec.collections = ast.literal_eval(self._spec.collections)
 
-    @property
-    def inputs(self):
-        # To keep the interface consistent with the project.update_artifact() when we update the artifact
-        return None
-
-    @property
-    def source(self):
+    def get_source(self):
         return generate_artifact_uri(self.metadata.project, self.spec.db_key)
 
     def to_langchain_documents(
@@ -272,8 +269,8 @@ class DocumentArtifact(Artifact):
                 ).download(tmp_file.name)
                 loader = loader_spec.make_loader(tmp_file.name)
                 documents = loader.load()
-        elif self.src_path:
-            loader = loader_spec.make_loader(self.src_path)
+        elif self.spec.original_source:
+            loader = loader_spec.make_loader(self.spec.original_source)
             documents = loader.load()
         else:
             raise ValueError(
@@ -289,8 +286,8 @@ class DocumentArtifact(Artifact):
 
             metadata = document.metadata
 
-            metadata[self.METADATA_ORIGINAL_SOURCE_KEY] = self.src_path
-            metadata[self.METADATA_SOURCE_KEY] = self.source
+            metadata[self.METADATA_ORIGINAL_SOURCE_KEY] = self.spec.original_source
+            metadata[self.METADATA_SOURCE_KEY] = self.get_source()
             metadata[self.METADATA_ARTIFACT_URI_KEY] = self.uri
             if self.get_target_path():
                 metadata[self.METADATA_ARTIFACT_TARGET_PATH_KEY] = (
@@ -307,7 +304,8 @@ class DocumentArtifact(Artifact):
         return results
 
     def collection_add(self, collection_id: str) -> None:
-        self.spec.collections.add(collection_id)
+        if collection_id not in self.spec.collections:
+            self.spec.collections.add(collection_id)
 
     def collection_remove(self, collection_id: str) -> None:
         return self.spec.collections.discard(collection_id)
