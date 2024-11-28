@@ -1535,7 +1535,7 @@ class MlrunProject(ModelObj):
 
     def update_artifact(self, artifact_object: Artifact):
         artifacts_manager = self._get_artifact_manager()
-        artifacts_manager.update_artifact(artifact_object, artifact_object)
+        artifacts_manager.update_artifact(self, artifact_object)
 
     def _get_artifact_manager(self):
         if self._artifact_manager:
@@ -1894,38 +1894,44 @@ class MlrunProject(ModelObj):
     def log_document(
         self,
         key: str,
+        tag: str = "",
+        local_path: str = "",
         artifact_path: Optional[str] = None,
         document_loader: DocumentLoaderSpec = DocumentLoaderSpec(),
-        tag: str = "",
         upload: Optional[bool] = False,
         labels: Optional[dict[str, str]] = None,
+        target_path: Optional[str] = None,
         **kwargs,
     ) -> DocumentArtifact:
         """
         Log a document as an artifact.
 
         :param key: Artifact key
-        :param target_path: Path to the local file
+        :param tag: Version tag
+        :param local_path:    path to the local file we upload, will also be use
+                              as the destination subpath (under "artifact_path")
         :param artifact_path: Target path for artifact storage
         :param document_loader: Spec to use to load the artifact as langchain document
-        :param tag: Version tag
         :param upload: Whether to upload the artifact
         :param labels: Key-value labels
+        :param target_path: Path to the local file
         :param kwargs: Additional keyword arguments
         :return: DocumentArtifact object
         """
         doc_artifact = DocumentArtifact(
             key=key,
+            original_source=target_path or local_path,
             document_loader=document_loader,
             **kwargs,
         )
-
         return self.log_artifact(
-            doc_artifact,
-            artifact_path=artifact_path,
+            item=doc_artifact,
             tag=tag,
+            local_path=local_path,
+            artifact_path=artifact_path,
             upload=upload,
             labels=labels,
+            target_path=target_path,
         )
 
     def import_artifact(
