@@ -39,7 +39,7 @@ class VectorStoreCollection:
             Adds a list of DocumentArtifact objects to the collection, optionally using a splitter to convert
             artifacts to documents.
 
-        remove_itself_from_artifact(artifact: DocumentArtifact):
+        remove_from_artifact(artifact: DocumentArtifact):
             Removes the current object from the given artifact's collection and updates the artifact.
 
         delete_artifacts(artifacts: list[DocumentArtifact]):
@@ -113,7 +113,6 @@ class VectorStoreCollection:
                 if mlrun_uri:
                     artifact = self._mlrun_context.get_store_resource(mlrun_uri)
                     artifact.collection_add(self.id)
-                    self._mlrun_context.update_artifact(artifact)
         return self._collection_impl.add_documents(documents, **kwargs)
 
     def add_artifacts(self, artifacts: list[DocumentArtifact], splitter=None, **kwargs):
@@ -129,15 +128,24 @@ class VectorStoreCollection:
             list: A list of IDs of the added documents.
         """
         all_ids = []
-        for artifact in artifacts:
+        user_ids = kwargs.pop("ids", None)
+        for index, artifact in enumerate(artifacts):
             documents = artifact.to_langchain_documents(splitter)
             artifact.collection_add(self.id)
-            self._mlrun_context.update_artifact(artifact)
+            if user_ids:
+                num_of_documents = len(documents)
+                if num_of_documents > 1:
+                    ids_to_pass = [
+                        f"{user_ids[index]}_{i}" for i in range(1, num_of_documents + 1)
+                    ]
+                else:
+                    ids_to_pass = [user_ids[index]]
+                kwargs["ids"] = ids_to_pass
             ids = self._collection_impl.add_documents(documents, **kwargs)
             all_ids.extend(ids)
         return all_ids
 
-    def remove_itself_from_artifact(self, artifact: DocumentArtifact):
+    def remove_from_artifact(self, artifact: DocumentArtifact):
         """
         Remove the current object from the given artifact's collection and update the artifact.
 
@@ -145,7 +153,6 @@ class VectorStoreCollection:
             artifact (DocumentArtifact): The artifact from which the current object should be removed.
         """
         artifact.collection_remove(self.id)
-        self._mlrun_context.update_artifact(artifact)
 
     def delete_artifacts(self, artifacts: list[DocumentArtifact]):
         """
@@ -163,12 +170,11 @@ class VectorStoreCollection:
         store_class = self._collection_impl.__class__.__name__.lower()
         for artifact in artifacts:
             artifact.collection_remove(self.id)
-            self._mlrun_context.update_artifact(artifact)
             if store_class == "milvus":
-                expr = f"{DocumentArtifact.METADATA_SOURCE_KEY} == '{artifact.source}'"
+                expr = f"{DocumentArtifact.METADATA_SOURCE_KEY} == '{artifact.get_source()}'"
                 return self._collection_impl.delete(expr=expr)
             elif store_class == "chroma":
-                where = {DocumentArtifact.METADATA_SOURCE_KEY: artifact.source}
+                where = {DocumentArtifact.METADATA_SOURCE_KEY: artifact.get_source()}
                 return self._collection_impl.delete(where=where)
 
             elif (
@@ -177,7 +183,9 @@ class VectorStoreCollection:
                 in inspect.signature(self._collection_impl.delete).parameters
             ):
                 filter = {
-                    "metadata": {DocumentArtifact.METADATA_SOURCE_KEY: artifact.source}
+                    "metadata": {
+                        DocumentArtifact.METADATA_SOURCE_KEY: artifact.get_source()
+                    }
                 }
                 return self._collection_impl.delete(filter=filter)
             else:

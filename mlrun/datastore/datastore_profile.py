@@ -82,8 +82,8 @@ class DatastoreProfileBasic(DatastoreProfile):
 
 
 class VectorStoreProfile(DatastoreProfile):
-    type: str = pydantic.Field("vector")
-    _private_attributes = ("kwargs_private",)
+    type = "vector"
+    _private_attributes = "kwargs_private"
     vector_store_class: str
     kwargs_public: typing.Optional[dict] = None
     kwargs_private: typing.Optional[dict] = None
@@ -96,6 +96,15 @@ class VectorStoreProfile(DatastoreProfile):
             attributes = merge(attributes, self.kwargs_private)
         if kwargs:
             attributes = merge(attributes, kwargs)
+
+        # Special care for Chroma
+        if "Chroma" in self.vector_store_class and "client_settings" in attributes:
+            import chromadb.config
+
+            attributes["client_settings"] = chromadb.config.Settings(
+                **attributes["client_settings"]
+            )
+
         return attributes
 
 
