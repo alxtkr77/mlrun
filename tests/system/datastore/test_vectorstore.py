@@ -189,31 +189,6 @@ class TestDatastoreProfile(TestMLRunSystem):
         lc_documents = stored_artifcat.to_langchain_documents()
         assert lc_documents[0].page_content == sample_content2
 
-    @pytest.mark.skip("Not tested yet")
-    def test_chroma_db(self):
-        from langchain.embeddings import FakeEmbeddings
-
-        embedding_model = FakeEmbeddings(size=3)
-        profile = VectorStoreProfile(
-            name="chroma",
-            vector_store_class="langchain_community.vectorstores.Chroma",
-            kwargs_private={
-                # Chroma client settings is a special case.
-                # Those parameters will be passed to the chromadb.config.Settings() class as kwargs
-                "client_settings": {
-                    "is_persistent": True,
-                }
-            },
-        )
-        register_temporary_client_datastore_profile(profile)
-        self.project.register_datastore_profile(profile)
-
-        self.project.get_or_create_vector_store_collection(
-            collection_name="collection_name",
-            profile=profile.name,
-            embedding_function=embedding_model,
-        )
-
     def test_vectorstore_collection_documents(self):
         from langchain.embeddings import FakeEmbeddings
 
@@ -228,9 +203,13 @@ class TestDatastoreProfile(TestMLRunSystem):
                 }
             },
         )
+
+        register_temporary_client_datastore_profile(profile)
+        self.project.register_datastore_profile(profile)
+
         collection = self.project.get_or_create_vector_store_collection(
             collection_name="collection_name",
-            profile=profile,
+            profile=profile.name,
             embedding_function=embedding_model,
             auto_id=True,
         )

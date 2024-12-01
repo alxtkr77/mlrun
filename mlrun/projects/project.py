@@ -1914,7 +1914,7 @@ class MlrunProject(ModelObj):
         :param document_loader: Spec to use to load the artifact as langchain document
         :param upload: Whether to upload the artifact
         :param labels: Key-value labels
-        :param target_path: Path to the local file
+        :param target_path: Target file path
         :param kwargs: Additional keyword arguments
         :return: DocumentArtifact object
         """
