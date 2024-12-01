@@ -81,7 +81,7 @@ class MLRunLoader:
     Args:
         artifact_key (str): The key for the artifact to be logged.It can include '%%' which will be replaced
         by a hex-encoded version of the source path.
-        source_path (str): The source path of the document to be loaded.
+        local_path (str): The source path of the document to be loaded.
         loader_spec (DocumentLoaderSpec): Specification for the document loader.
         producer (Optional[Union[MlrunProject, str, MLClientCtx]], optional): The producer of the document
         upload (bool, optional): Flag indicating whether to upload the document.

@@ -96,15 +96,6 @@ class VectorStoreProfile(DatastoreProfile):
             attributes = merge(attributes, self.kwargs_private)
         if kwargs:
             attributes = merge(attributes, kwargs)
-
-        # Special care for Chroma
-        if "Chroma" in self.vector_store_class and "client_settings" in attributes:
-            import chromadb.config
-
-            attributes["client_settings"] = chromadb.config.Settings(
-                **attributes["client_settings"]
-            )
-
         return attributes
 
 
