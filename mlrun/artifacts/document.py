@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import ast
 import re
 import tempfile
 from collections.abc import Iterator
@@ -129,7 +128,7 @@ class MLRunLoader:
             def lazy_load(self) -> Iterator["Document"]:  # noqa: F821
                 artifact = self.producer.log_document(
                     key=self.artifact_key,
-                    document_loader=self.loader_spec,
+                    document_loader_spec=self.loader_spec,
                     local_path=self.local_path,
                     upload=self.upload,
                 )
@@ -196,9 +195,9 @@ class DocumentArtifact(Artifact):
         def __init__(
             self,
             *args,
-            document_loader=None,
-            collections=None,
-            original_source=None,
+            document_loader: Optional[DocumentLoaderSpec] = None,
+            collections: Optional[dict] = None,
+            original_source: Optional[str] = None,
             **kwargs,
         ):
             super().__init__(*args, **kwargs)
@@ -221,12 +220,14 @@ class DocumentArtifact(Artifact):
     def __init__(
         self,
         original_source: Optional[str] = None,
-        document_loader: Optional[DocumentLoaderSpec] = None,
+        document_loader_spec: Optional[DocumentLoaderSpec] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.spec.document_loader = (
-            document_loader.to_str() if document_loader else self.spec.document_loader
+            document_loader_spec.to_dict()
+            if document_loader_spec
+            else self.spec.document_loader
         )
         self.spec.original_source = original_source or self.spec.original_source
 
@@ -258,9 +259,8 @@ class DocumentArtifact(Artifact):
         Returns:
             list[Document]: A list of LangChain Document objects.
         """
-        dictionary = ast.literal_eval(self.spec.document_loader)
-        loader_spec = DocumentLoaderSpec.from_dict(dictionary)
 
+        loader_spec = DocumentLoaderSpec.from_dict(self.spec.document_loader)
         if self.get_target_path():
             with tempfile.NamedTemporaryFile() as tmp_file:
                 mlrun.datastore.store_manager.object(

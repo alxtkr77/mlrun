@@ -1535,7 +1535,9 @@ class MlrunProject(ModelObj):
 
     def update_artifact(self, artifact_object: Artifact):
         artifacts_manager = self._get_artifact_manager()
-        artifacts_manager.update_artifact(self, artifact_object)
+        project_tag = self._get_project_tag()
+        producer, _ = self._resolve_artifact_producer(artifact_object, project_tag)
+        artifacts_manager.update_artifact(producer, artifact_object)
 
     def _get_artifact_manager(self):
         if self._artifact_manager:
@@ -1897,7 +1899,7 @@ class MlrunProject(ModelObj):
         tag: str = "",
         local_path: str = "",
         artifact_path: Optional[str] = None,
-        document_loader: DocumentLoaderSpec = DocumentLoaderSpec(),
+        document_loader_spec: Optional[DocumentLoaderSpec] = None,
         upload: Optional[bool] = False,
         labels: Optional[dict[str, str]] = None,
         target_path: Optional[str] = None,
@@ -1911,7 +1913,7 @@ class MlrunProject(ModelObj):
         :param local_path:    path to the local file we upload, will also be use
                               as the destination subpath (under "artifact_path")
         :param artifact_path: Target path for artifact storage
-        :param document_loader: Spec to use to load the artifact as langchain document
+        :param document_loader_spec: Spec to use to load the artifact as langchain document
         :param upload: Whether to upload the artifact
         :param labels: Key-value labels
         :param target_path: Target file path
@@ -1921,7 +1923,9 @@ class MlrunProject(ModelObj):
         doc_artifact = DocumentArtifact(
             key=key,
             original_source=target_path or local_path,
-            document_loader=document_loader,
+            document_loader_spec=document_loader_spec
+            if document_loader_spec
+            else DocumentLoaderSpec(),
             **kwargs,
         )
         return self.log_artifact(

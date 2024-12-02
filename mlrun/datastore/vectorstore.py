@@ -113,6 +113,8 @@ class VectorStoreCollection:
                 if mlrun_uri:
                     artifact = self._mlrun_context.get_store_resource(mlrun_uri)
                     artifact.collection_add(self.id)
+                    self._mlrun_context.update_artifact(artifact)
+
         return self._collection_impl.add_documents(documents, **kwargs)
 
     def add_artifacts(self, artifacts: list[DocumentArtifact], splitter=None, **kwargs):
@@ -132,6 +134,8 @@ class VectorStoreCollection:
         for index, artifact in enumerate(artifacts):
             documents = artifact.to_langchain_documents(splitter)
             artifact.collection_add(self.id)
+            if self._mlrun_context:
+                self._mlrun_context.update_artifact(artifact)
             if user_ids:
                 num_of_documents = len(documents)
                 if num_of_documents > 1:
@@ -153,6 +157,8 @@ class VectorStoreCollection:
             artifact (DocumentArtifact): The artifact from which the current object should be removed.
         """
         artifact.collection_remove(self.id)
+        if self._mlrun_context:
+            self._mlrun_context.update_artifact(artifact)
 
     def delete_artifacts(self, artifacts: list[DocumentArtifact]):
         """
@@ -170,6 +176,9 @@ class VectorStoreCollection:
         store_class = self._collection_impl.__class__.__name__.lower()
         for artifact in artifacts:
             artifact.collection_remove(self.id)
+            if self._mlrun_context:
+                self._mlrun_context.update_artifact(artifact)
+
             if store_class == "milvus":
                 expr = f"{DocumentArtifact.METADATA_SOURCE_KEY} == '{artifact.get_source()}'"
                 return self._collection_impl.delete(expr=expr)

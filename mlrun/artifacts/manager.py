@@ -325,7 +325,7 @@ class ArtifactManager:
 
     def update_artifact(self, producer, item: Artifact):
         self.artifact_uris[item.key] = item.uri
-        self._log_to_db(item.db_key, producer.name, None, item)
+        self._log_to_db(item.db_key, producer.project, producer.inputs, item)
 
     def _log_to_db(self, key, project, sources, item, tag=None):
         """

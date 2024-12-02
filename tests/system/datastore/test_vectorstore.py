@@ -263,6 +263,7 @@ class TestDatastoreProfile(TestMLRunSystem):
 
         doc3 = self.project.get_artifact("lc_doc3")
         doc3.collection_remove(collection.id)
+        self.project.update_artifact(doc3)
 
         doc3 = self.project.get_artifact("lc_doc3")
         assert len(doc3.spec.collections) == 0
