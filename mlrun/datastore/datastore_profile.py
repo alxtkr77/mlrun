@@ -81,21 +81,36 @@ class DatastoreProfileBasic(DatastoreProfile):
     private: typing.Optional[str] = None
 
 
-class VectorStoreProfile(DatastoreProfile):
-    type = "vector"
-    _private_attributes = "kwargs_private"
-    vector_store_class: str
-    kwargs_public: typing.Optional[dict] = None
-    kwargs_private: typing.Optional[dict] = None
+class ConfigProfile(DatastoreProfile):
+    """A profile class for managing configuration data with nested public and private attributes.
 
-    def attributes(self, kwargs=None):
+    This class extends DatastoreProfile to handle configuration settings, separating them into
+    public and private dictionaries. Both dictionaries support nested structures, and the class
+    provides functionality to merge these attributes when needed.
+
+    Attributes:
+        type (str): Set to "config" to identify this profile type
+        _private_attributes (str): Identifies private attributes as "private"
+        public (Optional[dict]): Dictionary containing public configuration settings,
+            supporting nested structures
+        private (Optional[dict]): Dictionary containing private/sensitive configuration settings,
+            supporting nested structures
+
+    Methods:
+        attributes(): Merges and returns combined public and private attributes
+    """
+
+    type = "config"
+    _private_attributes = "private"
+    public: typing.Optional[dict] = None
+    private: typing.Optional[dict] = None
+
+    def attributes(self):
         attributes = {}
-        if self.kwargs_public:
-            attributes = merge(attributes, self.kwargs_public)
-        if self.kwargs_private:
-            attributes = merge(attributes, self.kwargs_private)
-        if kwargs:
-            attributes = merge(attributes, kwargs)
+        if self.public:
+            attributes = merge(attributes, self.public)
+        if self.private:
+            attributes = merge(attributes, self.private)
         return attributes
 
 
@@ -494,7 +509,7 @@ class DatastoreProfile2Json(pydantic.v1.BaseModel):
             "gcs": DatastoreProfileGCS,
             "az": DatastoreProfileAzureBlob,
             "hdfs": DatastoreProfileHdfs,
-            "vector": VectorStoreProfile,
+            "config": ConfigProfile,
         }
         if datastore_type in ds_profile_factory:
             return ds_profile_factory[datastore_type].parse_obj(decoded_dict)

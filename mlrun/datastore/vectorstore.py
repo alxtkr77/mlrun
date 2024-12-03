@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import inspect
-from importlib import import_module
 from typing import Union
 
 from mlrun.artifacts import DocumentArtifact
@@ -21,57 +20,32 @@ from mlrun.artifacts import DocumentArtifact
 
 class VectorStoreCollection:
     """
-    VectorStoreCollection is a class that manages a collection of vector stores, providing methods to add and delete
-    documents and artifacts, and to interact with an MLRun context.
+    A wrapper class for vector store collections with MLRun integration.
+
+    This class wraps a vector store implementation (like Milvus, Chroma) and provides
+    integration with MLRun context for document and artifact management. It delegates
+    most operations to the underlying vector store while handling MLRun-specific
+    functionality.
 
     Attributes:
-        _collection_impl (object): The underlying collection implementation.
-        _mlrun_context (Union[MlrunProject, MLClientCtx]): The MLRun context associated with the collection.
-        collection_name (str): The name of the collection.
-        id (str): The unique identifier of the collection, composed of the datastore profile and collection name.
+        collection_name (str): Name of the vector store collection
+        _collection_impl (VectorStore): The underlying vector store implementation
+        _mlrun_context (Union[MlrunProject, MLClientCtx]): MLRun context for artifact tracking
 
-    Methods:
-        add_documents(documents: list["Document"], **kwargs):
-            Adds a list of documents to the collection and updates the MLRun artifacts associated with the documents
-            if an MLRun context is present.
-
-        add_artifacts(artifacts: list[DocumentArtifact], splitter=None, **kwargs):
-            Adds a list of DocumentArtifact objects to the collection, optionally using a splitter to convert
-            artifacts to documents.
-
-        remove_from_artifact(artifact: DocumentArtifact):
-            Removes the current object from the given artifact's collection and updates the artifact.
-
-        delete_artifacts(artifacts: list[DocumentArtifact]):
-            Deletes a list of DocumentArtifact objects from the collection and updates the MLRun context.
-            Raises NotImplementedError if the delete operation is not supported for the collection implementation.
+    The class implements attribute delegation through __getattr__ and __setattr__,
+    allowing direct access to the underlying vector store's methods and attributes
+    while maintaining MLRun integration.
     """
 
     def __init__(
         self,
-        vector_store_class: str,
         mlrun_context: Union["MlrunProject", "MLClientCtx"],  # noqa: F821
-        datastore_profile: str,
         collection_name: str,
-        **kwargs,
+        vector_store: "VectorStore",  # noqa: F821
     ):
-        # Import the vector store class dynamically
-        module_name, class_name = vector_store_class.rsplit(".", 1)
-        module = import_module(module_name)
-        vector_store_class = getattr(module, class_name)
-
-        signature = inspect.signature(vector_store_class)
-
-        # Create the vector store instance
-        if "collection_name" in signature.parameters.keys():
-            vector_store = vector_store_class(collection_name=collection_name, **kwargs)
-        else:
-            vector_store = vector_store_class(**kwargs)
-
         self._collection_impl = vector_store
         self._mlrun_context = mlrun_context
         self.collection_name = collection_name
-        self.id = datastore_profile + "/" + collection_name
 
     def __getattr__(self, name):
         # This method is called when an attribute is not found in the usual places
@@ -112,7 +86,7 @@ class VectorStoreCollection:
                 )
                 if mlrun_uri:
                     artifact = self._mlrun_context.get_store_resource(mlrun_uri)
-                    artifact.collection_add(self.id)
+                    artifact.collection_add(self.collection_name)
         return self._collection_impl.add_documents(documents, **kwargs)
 
     def add_artifacts(self, artifacts: list[DocumentArtifact], splitter=None, **kwargs):
@@ -131,7 +105,7 @@ class VectorStoreCollection:
         user_ids = kwargs.pop("ids", None)
         for index, artifact in enumerate(artifacts):
             documents = artifact.to_langchain_documents(splitter)
-            artifact.collection_add(self.id)
+            artifact.collection_add(self.collection_name)
             if user_ids:
                 num_of_documents = len(documents)
                 if num_of_documents > 1:
@@ -152,7 +126,7 @@ class VectorStoreCollection:
         Args:
             artifact (DocumentArtifact): The artifact from which the current object should be removed.
         """
-        artifact.collection_remove(self.id)
+        artifact.collection_remove(self.collection_name)
 
     def delete_artifacts(self, artifacts: list[DocumentArtifact]):
         """
@@ -169,7 +143,7 @@ class VectorStoreCollection:
         """
         store_class = self._collection_impl.__class__.__name__.lower()
         for artifact in artifacts:
-            artifact.collection_remove(self.id)
+            artifact.collection_remove(self.collection_name)
             if store_class == "milvus":
                 expr = f"{DocumentArtifact.METADATA_SOURCE_KEY} == '{artifact.get_source()}'"
                 return self._collection_impl.delete(expr=expr)
