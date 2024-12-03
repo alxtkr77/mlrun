@@ -23,7 +23,7 @@ import yaml
 
 from mlrun.artifacts import DocumentLoaderSpec, MLRunLoader
 from mlrun.datastore.datastore_profile import (
-    VectorStoreProfile,
+    ConfigProfile,
     register_temporary_client_datastore_profile,
 )
 from tests.system.base import TestMLRunSystem
@@ -190,29 +190,13 @@ class TestDatastoreProfile(TestMLRunSystem):
         assert lc_documents[0].page_content == sample_content2
 
     def test_vectorstore_collection_documents(self):
-        from langchain.embeddings import FakeEmbeddings
-
-        embedding_model = FakeEmbeddings(size=3)
-        profile = VectorStoreProfile(
-            name="milvus",
-            vector_store_class="langchain_community.vectorstores.Milvus",
-            kwargs_private={
-                "connection_args": {
-                    "host": config["MILVUS_HOST"],
-                    "port": config["MILVUS_PORT"],
-                }
-            },
+        vectorstore = self.make_milvus_connection(
+            "my_collection_auto_ids", auto_id=True
+        )
+        collection = self.project.get_vector_store_collection(
+            collection_name="my_collection_name", vector_store=vectorstore
         )
 
-        register_temporary_client_datastore_profile(profile)
-        self.project.register_datastore_profile(profile)
-
-        collection = self.project.get_or_create_vector_store_collection(
-            collection_name="collection_name",
-            profile=profile.name,
-            embedding_function=embedding_model,
-            auto_id=True,
-        )
         with tempfile.NamedTemporaryFile(mode="w") as temp_file1:
             temp_file1.write(generate_random_text(1000))
             temp_file1.flush()
@@ -245,7 +229,7 @@ class TestDatastoreProfile(TestMLRunSystem):
                     collection.col.flush()
                     documents_in_db = collection.similarity_search(
                         query="",
-                        expr=f"{doc1.METADATA_ORIGINAL_SOURCE_KEY} == '{temp_file1.name}'",
+                        expr=f'{doc1.METADATA_ORIGINAL_SOURCE_KEY} == "{temp_file1.name}"',
                     )
                     assert len(documents_in_db) == 1
 
@@ -262,7 +246,7 @@ class TestDatastoreProfile(TestMLRunSystem):
         assert len(doc2.spec.collections) == 0
 
         doc3 = self.project.get_artifact("lc_doc3")
-        doc3.collection_remove(collection.id)
+        doc3.collection_remove(collection.collection_name)
         self.project.update_artifact(doc3)
 
         doc3 = self.project.get_artifact("lc_doc3")
@@ -270,8 +254,39 @@ class TestDatastoreProfile(TestMLRunSystem):
 
         collection.col.drop()
 
-    def test_vectorstore_splitter_and_ids(self):
+    def make_milvus_connection(self, collection_name, auto_id):
         from langchain.embeddings import FakeEmbeddings
+        from langchain_community.vectorstores import Milvus
+
+        embedding_model = FakeEmbeddings(size=3)
+
+        profile = ConfigProfile(
+            name="my_config",
+            private={"OPENAI_API_KEY": "somekey"},
+            public={
+                "MILVUS_DB": {
+                    "host": config["MILVUS_HOST"],
+                    "port": int(config["MILVUS_PORT"]),
+                }
+            },
+        )
+        # Register the profile temporarily for the current client session
+        register_temporary_client_datastore_profile(profile)
+        # Permanently register the profile with the project for future use
+        self.project.register_datastore_profile(profile)
+        # Retrieve the configuartion profile by its name
+        myconfig = self.project.get_config_profile("my_config")
+
+        # Initialize the Milvus vector store
+        vectorstore = Milvus(
+            collection_name=collection_name,
+            embedding_function=embedding_model,
+            connection_args=myconfig["MILVUS_DB"],
+            auto_id=auto_id,
+        )
+        return vectorstore
+
+    def test_vectorstore_splitter_and_ids(self):
         from langchain.text_splitter import CharacterTextSplitter
 
         splitter = CharacterTextSplitter(
@@ -280,22 +295,13 @@ class TestDatastoreProfile(TestMLRunSystem):
             chunk_overlap=0,  # No overlap between chunks
         )
 
-        embedding_model = FakeEmbeddings(size=3)
-        profile = VectorStoreProfile(
-            name="milvus",
-            vector_store_class="langchain_community.vectorstores.Milvus",
-            kwargs_private={
-                "connection_args": {
-                    "host": config["MILVUS_HOST"],
-                    "port": config["MILVUS_PORT"],
-                }
-            },
+        vectorstore = self.make_milvus_connection(
+            "my_clooletion_with_ids", auto_id=False
         )
-        collection = self.project.get_or_create_vector_store_collection(
-            collection_name="collection_name_with_ids",
-            profile=profile,
-            embedding_function=embedding_model,
+        collection = self.project.get_vector_store_collection(
+            collection_name="collection_name_with_ids", vector_store=vectorstore
         )
+
         with tempfile.NamedTemporaryFile(mode="w") as temp_file1:
             temp_file1.write(generate_random_text(200))
             temp_file1.flush()

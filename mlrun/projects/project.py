@@ -62,7 +62,6 @@ from mlrun.alerts.alert import AlertConfig
 from mlrun.datastore.datastore_profile import (
     DatastoreProfile,
     DatastoreProfile2Json,
-    VectorStoreProfile,
     datastore_profile_read,
 )
 from mlrun.datastore.vectorstore import VectorStoreCollection
@@ -1864,33 +1863,15 @@ class MlrunProject(ModelObj):
         )
         return item
 
-    def get_or_create_vector_store_collection(
+    def get_vector_store_collection(
         self,
         collection_name: str,
-        profile: Union[str, VectorStoreProfile],
-        **kwargs,
+        vector_store: "VectorStore",  # noqa: F821
     ) -> VectorStoreCollection:
-        """
-        Create or retrieve a VectorStoreCollection.
-
-        :param collection_name: Name of the collection
-        :param profile: Name of the VectorStoreProfile or a VectorStoreProfile object
-        :param kwargs: Additional arguments for the VectorStoreCollection
-        :return: VectorStoreCollection object
-        """
-        if isinstance(profile, str):
-            profile = datastore_profile_read(f"ds://{profile}")
-
-        if not isinstance(profile, VectorStoreProfile):
-            raise ValueError(
-                "Profile must be a VectorStoreProfile object or a profile name"
-            )
         return VectorStoreCollection(
-            profile.vector_store_class,
             self,
-            profile.name,
             collection_name,
-            **profile.attributes(kwargs),
+            vector_store,
         )
 
     def log_document(
@@ -4511,6 +4492,25 @@ class MlrunProject(ModelObj):
         mlrun.db.get_run_db(secrets=self._secrets).store_datastore_profile(
             profile, self.name
         )
+
+    def get_config_profile(self, name: str) -> dict:
+        """
+        Get the merged attributes from a named configuration profile.
+
+        Retrieves a profile from the datastore using the provided name and returns its
+        merged public and private attributes as a dictionary.
+
+        Args:
+            name (str): Name of the configuration profile to retrieve. Will be prefixed
+                with "ds://" to form the full profile path.
+
+        Returns:
+            dict: The merged attributes dictionary containing both public and private
+                configuration settings from the profile. Returns nested dictionaries if
+                the profile contains nested configurations.
+        """
+        profile = datastore_profile_read(f"ds://{name}", self.name)
+        return profile.attributes()
 
     def delete_datastore_profile(self, profile: str):
         mlrun.db.get_run_db(secrets=self._secrets).delete_datastore_profile(

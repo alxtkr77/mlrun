@@ -303,13 +303,32 @@ class DocumentArtifact(Artifact):
         return results
 
     def collection_add(self, collection_id: str) -> None:
+        """
+        Add a collection ID to the artifact's collection list.
+
+        Adds the specified collection ID to the artifact's collection mapping if it
+        doesn't already exist.
+        This method only modifies the client-side artifact object and does not persist
+        the changes to the MLRun DB. To save the changes permanently, you must call
+        project.update_artifact() after this method.
+
+        Args:
+            collection_id (str): The ID of the collection to add
+        """
         if collection_id not in self.spec.collections:
             self.spec.collections[collection_id] = "1"
-            project = mlrun.get_or_create_project(mlrun.mlconf.default_project)
-            project.update_artifact(self)
 
     def collection_remove(self, collection_id: str) -> None:
+        """
+        Remove a collection ID from the artifact's collection list.
+
+        Removes the specified collection ID from the artifact's local collection mapping.
+        This method only modifies the client-side artifact object and does not persist
+        the changes to the MLRun DB. To save the changes permanently, you must call
+        project.update_artifact() after this method.
+
+        Args:
+            collection_id (str): The ID of the collection to remove
+        """
         if collection_id in self.spec.collections:
             self.spec.collections.pop(collection_id)
-            project = mlrun.get_or_create_project(mlrun.mlconf.default_project)
-            project.update_artifact(self)
