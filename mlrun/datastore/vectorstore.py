@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import inspect
+from collections.abc import Iterable
 from typing import Union
 
 from mlrun.artifacts import DocumentArtifact
@@ -26,11 +27,6 @@ class VectorStoreCollection:
     integration with MLRun context for document and artifact management. It delegates
     most operations to the underlying vector store while handling MLRun-specific
     functionality.
-
-    Attributes:
-        collection_name (str): Name of the vector store collection
-        _collection_impl (VectorStore): The underlying vector store implementation
-        _mlrun_context (Union[MlrunProject, MLClientCtx]): MLRun context for artifact tracking
 
     The class implements attribute delegation through __getattr__ and __setattr__,
     allowing direct access to the underlying vector store's methods and attributes
@@ -118,6 +114,14 @@ class VectorStoreCollection:
         """
         all_ids = []
         user_ids = kwargs.pop("ids", None)
+
+        if user_ids:
+            if not isinstance(user_ids, Iterable):
+                raise ValueError("IDs must be an iterable collection")
+            if len(user_ids) != len(artifacts):
+                raise ValueError(
+                    "The number of IDs should match the number of artifacts"
+                )
         for index, artifact in enumerate(artifacts):
             documents = artifact.to_langchain_documents(splitter)
             artifact.collection_add(self.collection_name)

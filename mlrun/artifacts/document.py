@@ -325,7 +325,7 @@ class DocumentArtifact(Artifact):
         Removes the specified collection ID from the artifact's local collection mapping.
         This method only modifies the client-side artifact object and does not persist
         the changes to the MLRun DB. To save the changes permanently, you must call
-        project.update_artifact() after this method.
+        project.update_artifact() or context.update_artifact() after this method.
 
         Args:
             collection_id (str): The ID of the collection to remove

@@ -88,10 +88,41 @@ class ConfigProfile(DatastoreProfile):
     public and private dictionaries. Both dictionaries support nested structures, and the class
     provides functionality to merge these attributes when needed.
 
-    public (Optional[dict]): Dictionary containing public configuration settings,
-        supporting nested structures
-    private (Optional[dict]): Dictionary containing private/sensitive configuration settings,
-        supporting nested structures
+    Args:
+        public (Optional[dict]): Dictionary containing public configuration settings,
+            supporting nested structures
+        private (Optional[dict]): Dictionary containing private/sensitive configuration settings,
+            supporting nested structures
+
+    Example:
+        >>> public = {
+            "database": {
+                "host": "localhost",
+                "port": 5432
+            },
+            "api_version": "v1"
+        }
+        >>> private = {
+            "database": {
+                "password": "secret123",
+                "username": "admin"
+            },
+            "api_key": "xyz789"
+        }
+        >>> config = ConfigProfile("myconfig", public=public, private=private)
+
+        # When attributes() is called, it merges public and private:
+        # {
+        #     "database": {
+        #         "host": "localhost",
+        #         "port": 5432,
+        #         "password": "secret123",
+        #         "username": "admin"
+        #     },
+        #     "api_version": "v1",
+        #     "api_key": "xyz789"
+        # }
+
     """
 
     type = "config"

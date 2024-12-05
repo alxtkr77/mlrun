@@ -905,7 +905,7 @@ class MLClientCtx:
         """
         doc_artifact = DocumentArtifact(
             key=key,
-            original_source=target_path or local_path,
+            original_source=local_path or target_path,
             document_loader=document_loader,
             **kwargs,
         )

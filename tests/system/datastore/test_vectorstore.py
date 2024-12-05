@@ -275,7 +275,7 @@ class TestDatastoreProfile(TestMLRunSystem):
         # Permanently register the profile with the project for future use
         self.project.register_datastore_profile(profile)
         # Retrieve the configuartion profile by its name
-        myconfig = self.project.get_config_profile("my_config")
+        myconfig = self.project.get_config_profile_attributes("my_config")
 
         # Initialize the Milvus vector store
         vectorstore = Milvus(

@@ -1903,7 +1903,7 @@ class MlrunProject(ModelObj):
         """
         doc_artifact = DocumentArtifact(
             key=key,
-            original_source=target_path or local_path,
+            original_source=local_path or target_path,
             document_loader_spec=document_loader_spec
             if document_loader_spec
             else DocumentLoaderSpec(),
@@ -4493,7 +4493,7 @@ class MlrunProject(ModelObj):
             profile, self.name
         )
 
-    def get_config_profile(self, name: str) -> dict:
+    def get_config_profile_attributes(self, name: str) -> dict:
         """
         Get the merged attributes from a named configuration profile.
 
