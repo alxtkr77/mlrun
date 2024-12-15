@@ -1899,12 +1899,35 @@ class MlrunProject(ModelObj):
         :param local_path:    path to the local file we upload, will also be use
                               as the destination subpath (under "artifact_path")
         :param artifact_path: Target path for artifact storage
-        :param document_loader_spec: Spec to use to load the artifact as langchain document
+        :param document_loader_spec: Spec to use to load the artifact as langchain document.
+                          By default, uses DocumentLoaderSpec() which initializes with:
+                          - loader_class_name="langchain_community.document_loaders.TextLoader"
+                          - src_name="file_path"
+                          - kwargs=None
+                          Can be customized for different document types, e.g.:
+                          DocumentLoaderSpec(
+                              loader_class_name="langchain_community.document_loaders.PDFLoader",
+                              src_name="file_path",
+                              kwargs={"extract_images": True}
+                          )
         :param upload: Whether to upload the artifact
         :param labels: Key-value labels
         :param target_path: Target file path
         :param kwargs: Additional keyword arguments
         :return: DocumentArtifact object
+
+        Example:
+            >>> # Log a PDF document with custom loader
+            >>> project.log_document(
+            ...     key="my_doc",
+            ...     local_path="path/to/doc.pdf",
+            ...     document_loader=DocumentLoaderSpec(
+            ...         loader_class_name="langchain_community.document_loaders.PDFLoader",
+            ...         src_name="file_path",
+            ...         kwargs={"extract_images": True},
+            ...     ),
+            ... )
+
         """
         doc_artifact = DocumentArtifact(
             key=key,
