@@ -89,12 +89,17 @@ class MLRunLoader:
     A factory class for creating instances of a dynamically defined document loader.
 
     Args:
-        artifact_key (str): The key for the artifact to be logged.It can include '%%' which will be replaced
+        artifact_key (str, optional): The key for the artifact to be logged. It can include '%%' which will be
+                                replaced by a hex-encoded version of the source path. Defaults to "doc%%".
         by a hex-encoded version of the source path.
         local_path (str): The source path of the document to be loaded.
         loader_spec (DocumentLoaderSpec): Specification for the document loader.
-        producer (Optional[Union[MlrunProject, str, MLClientCtx]], optional): The producer of the document
+        producer (Optional[Union[MlrunProject, str, MLClientCtx]], optional): The producer of the document.
+                                If not specified, will try to get the current MLRun context or project.
+                                Defaults to None.
         upload (bool, optional): Flag indicating whether to upload the document.
+        labels (Optional[Dict[str, str]], optional): Key-value labels to attach to the artifact. Defaults to None.
+        tag (str, optional): Version tag for the artifact. Defaults to "".
 
     Returns:
         DynamicDocumentLoader: An instance of a dynamically defined subclass of BaseLoader.
@@ -146,6 +151,8 @@ class MLRunLoader:
         artifact_key="doc%%",
         producer: Optional[Union["MlrunProject", str, "MLClientCtx"]] = None,  # noqa: F821
         upload: bool = False,
+        tag: str = "",
+        labels: Optional[dict[str, str]] = None,
     ):
         # Dynamically import BaseLoader
         from langchain_community.document_loaders.base import BaseLoader
@@ -158,6 +165,8 @@ class MLRunLoader:
                 artifact_key,
                 producer,
                 upload,
+                tag,
+                labels,
             ):
                 self.producer = producer
                 self.artifact_key = (
@@ -168,6 +177,8 @@ class MLRunLoader:
                 self.loader_spec = loader_spec
                 self.local_path = local_path
                 self.upload = upload
+                self.tag = tag
+                self.labels = labels
 
                 # Resolve the producer
                 if not self.producer:
@@ -181,9 +192,11 @@ class MLRunLoader:
                     document_loader_spec=self.loader_spec,
                     local_path=self.local_path,
                     upload=self.upload,
+                    labels=self.labels,
+                    tag=self.tag,
                 )
                 res = artifact.to_langchain_documents()
-                yield res[0]
+                return res
 
         # Return an instance of the dynamically defined subclass
         instance = DynamicDocumentLoader(
@@ -192,6 +205,8 @@ class MLRunLoader:
             loader_spec=loader_spec,
             producer=producer,
             upload=upload,
+            tag=tag,
+            labels=labels,
         )
         return instance
 
