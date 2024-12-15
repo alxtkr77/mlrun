@@ -880,7 +880,7 @@ class MLClientCtx:
         tag: str = "",
         local_path: str = "",
         artifact_path: Optional[str] = None,
-        document_loader: DocumentLoaderSpec = DocumentLoaderSpec(),
+        document_loader_spec: DocumentLoaderSpec = DocumentLoaderSpec(),
         upload: Optional[bool] = False,
         labels: Optional[dict[str, str]] = None,
         target_path: Optional[str] = None,
@@ -896,7 +896,7 @@ class MLClientCtx:
         :param artifact_path:   Target artifact path (when not using the default)
                                 to define a subpath under the default location use:
                                 `artifact_path=context.artifact_subpath('data')`
-        :param document_loader: Spec to use to load the artifact as langchain document.
+        :param document_loader_spec: Spec to use to load the artifact as langchain document.
                           By default, uses DocumentLoaderSpec() which initializes with:
                           - loader_class_name="langchain_community.document_loaders.TextLoader"
                           - src_name="file_path"
@@ -918,7 +918,7 @@ class MLClientCtx:
             >>> project.log_document(
             ...     key="my_doc",
             ...     local_path="path/to/doc.pdf",
-            ...     document_loader=DocumentLoaderSpec(
+            ...     document_loader_spec=DocumentLoaderSpec(
             ...         loader_class_name="langchain_community.document_loaders.PDFLoader",
             ...         src_name="file_path",
             ...         kwargs={"extract_images": True},
@@ -928,7 +928,7 @@ class MLClientCtx:
         doc_artifact = DocumentArtifact(
             key=key,
             original_source=local_path or target_path,
-            document_loader=document_loader,
+            document_loader_spec=document_loader_spec,
             **kwargs,
         )
 
