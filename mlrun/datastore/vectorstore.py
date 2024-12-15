@@ -19,19 +19,42 @@ from typing import Optional, Union
 from mlrun.artifacts import DocumentArtifact
 
 
+def find_existing_attribute(obj, base_name="name", parent_name="collection"):
+    # Define all possible patterns
+
+    return None
+
+
 def _extract_collection_name(vectorstore: "VectorStore") -> str:  # noqa: F821
-    # List of possible attribute names for collection name
-    possible_attributes = ["collection_name", "_collection_name"]
+    patterns = [
+        "collection.name",
+        "collection._name",
+        "_collection.name",
+        "_collection._name",
+        "collection_name",
+        "_collection_name",
+    ]
 
-    for attr in possible_attributes:
-        if hasattr(vectorstore, attr):
-            collection_name = getattr(vectorstore, attr)
-            if collection_name:
-                return collection_name
+    def resolve_attribute(obj, pattern):
+        if "." in pattern:
+            parts = pattern.split(".")
+            current = vectorstore
+            for part in parts:
+                if hasattr(current, part):
+                    current = getattr(current, part)
+                else:
+                    return None
+            return current
+        else:
+            return getattr(obj, pattern, None)
 
-    store_class = vectorstore.__class__.__name__.lower()
-    if store_class == "mongodbatlasvectorsearch":
-        return vectorstore.collection.name
+    for pattern in patterns:
+        try:
+            value = resolve_attribute(vectorstore, pattern)
+            if value is not None:
+                return value
+        except (AttributeError, TypeError):
+            continue
 
     # If we get here, we couldn't find a valid collection name
     raise ValueError(
