@@ -1928,13 +1928,13 @@ class MlrunProject(ModelObj):
                               as the destination subpath (under "artifact_path")
         :param artifact_path: Target path for artifact storage
         :param document_loader_spec: Spec to use to load the artifact as langchain document.
-            
+
             By default, uses DocumentLoaderSpec() which initializes with:
-            
+
             * loader_class_name="langchain_community.document_loaders.TextLoader"
             * src_name="file_path"
             * kwargs=None
-            
+
             Can be customized for different document types, e.g.::
 
                 DocumentLoaderSpec(
