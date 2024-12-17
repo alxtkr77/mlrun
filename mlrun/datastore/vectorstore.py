@@ -250,10 +250,10 @@ class VectorStoreCollection:
 
             if store_class == "milvus":
                 expr = f"{DocumentArtifact.METADATA_SOURCE_KEY} == '{artifact.get_source()}'"
-                return self._collection_impl.delete(expr=expr)
+                self._collection_impl.delete(expr=expr)
             elif store_class == "chroma":
                 where = {DocumentArtifact.METADATA_SOURCE_KEY: artifact.get_source()}
-                return self._collection_impl.delete(where=where)
+                self._collection_impl.delete(where=where)
 
             elif (
                 hasattr(self._collection_impl, "delete")
@@ -265,7 +265,7 @@ class VectorStoreCollection:
                         DocumentArtifact.METADATA_SOURCE_KEY: artifact.get_source()
                     }
                 }
-                return self._collection_impl.delete(filter=filter)
+                self._collection_impl.delete(filter=filter)
             else:
                 raise NotImplementedError(
                     f"delete_artifacts() operation not supported for {store_class}"
