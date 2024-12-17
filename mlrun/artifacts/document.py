@@ -272,6 +272,9 @@ class DocumentArtifact(Artifact):
     METADATA_CHUNK_KEY = "mlrun_chunk"
     METADATA_ARTIFACT_URI_KEY = "mlrun_object_uri"
     METADATA_ARTIFACT_TARGET_PATH_KEY = "mlrun_target_path"
+    METADATA_ARTIFACT_TAG = "mlrun_tag"
+    METADATA_ARTIFACT_KEY = "mlrun_key"
+    METADATA_ARTIFACT_PROJECT = "mlrun_project"
 
     def __init__(
         self,
@@ -346,6 +349,10 @@ class DocumentArtifact(Artifact):
             metadata[self.METADATA_ORIGINAL_SOURCE_KEY] = self.spec.original_source
             metadata[self.METADATA_SOURCE_KEY] = self.get_source()
             metadata[self.METADATA_ARTIFACT_URI_KEY] = self.uri
+            metadata[self.METADATA_ARTIFACT_TAG] = self.tag or "latest"
+            metadata[self.METADATA_ARTIFACT_KEY] = self.key
+            metadata[self.METADATA_ARTIFACT_PROJECT] = self.metadata.project
+
             if self.get_target_path():
                 metadata[self.METADATA_ARTIFACT_TARGET_PATH_KEY] = (
                     self.get_target_path()
@@ -361,7 +368,7 @@ class DocumentArtifact(Artifact):
                 idx = idx + 1
         return results
 
-    def collection_add(self, collection_id: str) -> None:
+    def collection_add(self, collection_id: str) -> bool:
         """
         Add a collection ID to the artifact's collection list.
 
@@ -376,8 +383,10 @@ class DocumentArtifact(Artifact):
         """
         if collection_id not in self.spec.collections:
             self.spec.collections[collection_id] = "1"
+            return True
+        return False
 
-    def collection_remove(self, collection_id: str) -> None:
+    def collection_remove(self, collection_id: str) -> bool:
         """
         Remove a collection ID from the artifact's collection list.
 
@@ -391,3 +400,5 @@ class DocumentArtifact(Artifact):
         """
         if collection_id in self.spec.collections:
             self.spec.collections.pop(collection_id)
+            return True
+        return False

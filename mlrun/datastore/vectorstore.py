@@ -105,6 +105,19 @@ class VectorStoreCollection:
             # Forward the attribute setting to _collection_impl
             setattr(self._collection_impl, name, value)
 
+    def _get_mlrun_project_name(self):
+        import mlrun
+
+        if self._mlrun_context and isinstance(
+            self._mlrun_context, mlrun.projects.MlrunProject
+        ):
+            return self._mlrun_context.name
+        if self._mlrun_context and isinstance(
+            self._mlrun_context, mlrun.execution.MLClientCtx
+        ):
+            return self._mlrun_context.get_project_object().name
+        return None
+
     def delete(self, *args, **kwargs):
         self._collection_impl.delete(*args, **kwargs)
 
@@ -129,13 +142,22 @@ class VectorStoreCollection:
         """
         if self._mlrun_context:
             for document in documents:
-                mlrun_uri = document.metadata.get(
-                    DocumentArtifact.METADATA_ARTIFACT_URI_KEY
+                mlrun_key = document.metadata.get(
+                    DocumentArtifact.METADATA_ARTIFACT_KEY, None
                 )
-                if mlrun_uri:
-                    artifact = self._mlrun_context.get_store_resource(mlrun_uri)
-                    artifact.collection_add(self.collection_name)
-                    self._mlrun_context.update_artifact(artifact)
+                mlrun_project = document.metadata.get(
+                    DocumentArtifact.METADATA_ARTIFACT_PROJECT, None
+                )
+
+                if mlrun_key and mlrun_project == self._get_mlrun_project_name():
+                    mlrun_tag = document.metadata.get(
+                        DocumentArtifact.METADATA_ARTIFACT_TAG, None
+                    )
+                    artifact = self._mlrun_context.get_artifact(
+                        key=mlrun_key, tag=mlrun_tag
+                    )
+                    if artifact.collection_add(self.collection_name):
+                        self._mlrun_context.update_artifact(artifact)
 
         return self._collection_impl.add_documents(documents, **kwargs)
 
@@ -182,8 +204,7 @@ class VectorStoreCollection:
                 )
         for index, artifact in enumerate(artifacts):
             documents = artifact.to_langchain_documents(splitter)
-            artifact.collection_add(self.collection_name)
-            if self._mlrun_context:
+            if artifact.collection_add(self.collection_name) and self._mlrun_context:
                 self._mlrun_context.update_artifact(artifact)
             if user_ids:
                 num_of_documents = len(documents)
@@ -205,8 +226,8 @@ class VectorStoreCollection:
         Args:
             artifact (DocumentArtifact): The artifact from which the current object should be removed.
         """
-        artifact.collection_remove(self.collection_name)
-        if self._mlrun_context:
+
+        if artifact.collection_remove(self.collection_name) and self._mlrun_context:
             self._mlrun_context.update_artifact(artifact)
 
     def delete_artifacts(self, artifacts: list[DocumentArtifact]):
@@ -224,8 +245,7 @@ class VectorStoreCollection:
         """
         store_class = self._collection_impl.__class__.__name__.lower()
         for artifact in artifacts:
-            artifact.collection_remove(self.collection_name)
-            if self._mlrun_context:
+            if artifact.collection_remove(self.collection_name) and self._mlrun_context:
                 self._mlrun_context.update_artifact(artifact)
 
             if store_class == "milvus":
