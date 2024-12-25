@@ -884,7 +884,7 @@ class MLClientCtx:
         upload: Optional[bool] = False,
         labels: Optional[dict[str, str]] = None,
         target_path: Optional[str] = None,
-        db_key=None,
+        db_key: Optional[str] = None,
         **kwargs,
     ) -> DocumentArtifact:
         """
