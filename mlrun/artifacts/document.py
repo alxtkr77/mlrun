@@ -325,7 +325,7 @@ class DocumentArtifact(Artifact):
         """
 
         loader_spec = DocumentLoaderSpec.from_dict(self.spec.document_loader)
-        if loader_spec.mlrun_download_object and self.get_target_path():
+        if loader_spec.download_object and self.get_target_path():
             with tempfile.NamedTemporaryFile() as tmp_file:
                 mlrun.datastore.store_manager.object(
                     url=self.get_target_path()
