@@ -20,10 +20,12 @@ from importlib import import_module
 from typing import Optional, Union
 
 import mlrun
+import mlrun.artifacts
 from mlrun.artifacts import Artifact, ArtifactSpec
 from mlrun.model import ModelObj
 
 from ..utils import generate_artifact_uri
+from .base import ArtifactStatus
 
 
 class DocumentLoaderSpec(ModelObj):
@@ -252,25 +254,31 @@ class DocumentArtifact(Artifact):
     class DocumentArtifactSpec(ArtifactSpec):
         _dict_fields = ArtifactSpec._dict_fields + [
             "document_loader",
-            "collections",
             "original_source",
-        ]
-        _exclude_fields_from_uid_hash = ArtifactSpec._exclude_fields_from_uid_hash + [
-            "collections",
         ]
 
         def __init__(
             self,
             *args,
             document_loader: Optional[DocumentLoaderSpec] = None,
-            collections: Optional[dict] = None,
             original_source: Optional[str] = None,
             **kwargs,
         ):
             super().__init__(*args, **kwargs)
             self.document_loader = document_loader
-            self.collections = collections if collections is not None else {}
             self.original_source = original_source
+
+    class DocumentArtifactStatus(ArtifactStatus):
+        _dict_fields = ArtifactStatus._dict_fields + ["collections"]
+
+        def __init__(
+            self,
+            *args,
+            collections: Optional[dict] = None,
+            **kwargs,
+        ):
+            super().__init__(*args, **kwargs)
+            self.collections = collections if collections is not None else {}
 
     kind = "document"
 
@@ -295,6 +303,17 @@ class DocumentArtifact(Artifact):
             else self.spec.document_loader
         )
         self.spec.original_source = original_source or self.spec.original_source
+        self.status = DocumentArtifact.DocumentArtifactStatus()
+
+    @property
+    def status(self) -> DocumentArtifactStatus:
+        return self._status
+
+    @status.setter
+    def status(self, status):
+        self._status = self._verify_dict(
+            status, "status", DocumentArtifact.DocumentArtifactStatus
+        )
 
     @property
     def spec(self) -> DocumentArtifactSpec:
@@ -386,8 +405,8 @@ class DocumentArtifact(Artifact):
         Args:
             collection_id (str): The ID of the collection to add
         """
-        if collection_id not in self.spec.collections:
-            self.spec.collections[collection_id] = "1"
+        if collection_id not in self.status.collections:
+            self.status.collections[collection_id] = "1"
             return True
         return False
 
@@ -403,7 +422,7 @@ class DocumentArtifact(Artifact):
         Args:
             collection_id (str): The ID of the collection to remove
         """
-        if collection_id in self.spec.collections:
-            self.spec.collections.pop(collection_id)
+        if collection_id in self.status.collections:
+            self.status.collections.pop(collection_id)
             return True
         return False
