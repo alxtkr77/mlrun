@@ -193,6 +193,14 @@ class MLRunLoader:
                     self.producer = mlrun.get_or_create_project(self.producer)
 
             def lazy_load(self) -> Iterator["Document"]:  # noqa: F821
+                collections = None
+                try:
+                    artifact = self.producer.get_artifact(self.artifact_key, self.tag)
+                    collections = (
+                        artifact.status.collections if artifact else collections
+                    )
+                except mlrun.MLRunNotFoundError:
+                    pass
                 artifact = self.producer.log_document(
                     key=self.artifact_key,
                     document_loader_spec=self.loader_spec,
@@ -200,6 +208,7 @@ class MLRunLoader:
                     upload=self.upload,
                     labels=self.labels,
                     tag=self.tag,
+                    collections=collections,
                 )
                 res = artifact.to_langchain_documents()
                 return res
@@ -294,6 +303,7 @@ class DocumentArtifact(Artifact):
         self,
         original_source: Optional[str] = None,
         document_loader_spec: Optional[DocumentLoaderSpec] = None,
+        collections: Optional[dict] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -303,7 +313,7 @@ class DocumentArtifact(Artifact):
             else self.spec.document_loader
         )
         self.spec.original_source = original_source or self.spec.original_source
-        self.status = DocumentArtifact.DocumentArtifactStatus()
+        self.status = DocumentArtifact.DocumentArtifactStatus(collections=collections)
 
     @property
     def status(self) -> DocumentArtifactStatus:

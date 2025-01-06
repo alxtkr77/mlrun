@@ -1974,6 +1974,7 @@ class MlrunProject(ModelObj):
             key=key,
             original_source=local_path or target_path,
             document_loader_spec=document_loader_spec,
+            collections=kwargs.pop("collections", None),
             **kwargs,
         )
         return self.log_artifact(
