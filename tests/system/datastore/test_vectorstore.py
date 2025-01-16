@@ -65,6 +65,7 @@ class TestDatastoreProfile(TestMLRunSystem):
             artifact = self.project.log_document(
                 artifact_key, local_path=temp_file.name, upload=False
             )
+            assert artifact.labels["source"] == temp_file.name
 
             get_store_resource(
                 f"store://documents/{self.project.name}/{artifact_key}#0:latest"
