@@ -222,3 +222,40 @@ def validate_additional_filters(additional_filters):
             for sub_value in value:
                 if isinstance(sub_value, float) and math.isnan(sub_value):
                     raise mlrun.errors.MLRunInvalidArgumentError(nan_error_message)
+
+
+class KafkaParameters:
+    def __init__(self, kwargs: dict):
+        import kafka
+
+        self._kafka = kafka
+        self._kwargs = kwargs
+        self._client_configs = {
+            "consumer": self._kafka.KafkaConsumer.DEFAULT_CONFIG,
+            "producer": self._kafka.KafkaProducer.DEFAULT_CONFIG,
+            "admin": self._kafka.KafkaAdminClient.DEFAULT_CONFIG,
+        }
+
+    def _get_config(self, client_type: str) -> dict:
+        res = {
+            k: self._kwargs[k]
+            for k in self._kwargs.keys() & self._client_configs[client_type].keys()
+        }
+        if "sasl" in self._kwargs:
+            sasl = self._kwargs["sasl"]
+            res |= {
+                "security_protocol": "SASL_PLAINTEXT",
+                "sasl_mechanism": sasl["mechanism"],
+                "sasl_plain_username": sasl["user"],
+                "sasl_plain_password": sasl["password"],
+            }
+        return res
+
+    def consumer(self) -> dict:
+        return self._get_config("consumer")
+
+    def producer(self) -> dict:
+        return self._get_config("producer")
+
+    def admin(self) -> dict:
+        return self._get_config("admin")
