@@ -24,7 +24,6 @@ import pandas as pd
 import semver
 import v3io
 import v3io.dataplane
-from kafka.errors import KafkaError
 from nuclio import KafkaTrigger
 from nuclio.config import split_path
 
