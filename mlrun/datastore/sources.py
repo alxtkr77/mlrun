@@ -1200,16 +1200,25 @@ class KafkaSource(OnlineSource):
         new_topics = [
             NewTopic(topic, num_partitions, replication_factor) for topic in topics
         ]
-        kafka_admin_kwargs = mlrun.datastore.utils.KafkaParameters(
-            self.attributes
-        ).admin()
-        kafka_admin_kwargs["bootstrap_servers"] = brokers
+
+        kafka_admin_kwargs = {}
+        if "sasl" in self.attributes:
+            sasl = self.attributes["sasl"]
+            kafka_admin_kwargs.update(
+                {
+                    "security_protocol": "SASL_PLAINTEXT",
+                    "sasl_mechanism": sasl["mechanism"],
+                    "sasl_plain_username": sasl["user"],
+                    "sasl_plain_password": sasl["password"],
+                }
+            )
         from mlrun.utils.debug import debug_info
 
         debug_info(
             {"bootstrap_servers": brokers, "kafka_admin_kwargs": kafka_admin_kwargs}
         )
-        kafka_admin = KafkaAdminClient(**kafka_admin_kwargs)
+
+        kafka_admin = KafkaAdminClient(bootstrap_servers=brokers, **kafka_admin_kwargs)
         try:
             kafka_admin.create_topics(new_topics)
         finally:

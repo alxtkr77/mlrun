@@ -127,7 +127,7 @@ class StreamStoreyTarget(storey.StreamTarget):
 class KafkaStoreyTarget(storey.KafkaTarget):
     def __init__(self, *args, **kwargs):
         path = kwargs.pop("path")
-        attributes = kwargs.pop("attributes", {})
+        attributes = kwargs.pop("attributes", None)
         if path and path.startswith("ds://"):
             datastore_profile = (
                 mlrun.datastore.datastore_profile.datastore_profile_read(path)
@@ -136,8 +136,7 @@ class KafkaStoreyTarget(storey.KafkaTarget):
             brokers = attributes.pop(
                 "brokers", attributes.pop("bootstrap_servers", None)
             )
-            # Override the topic with the one in the url (if any)
-            datastore_profile.get_topic()
+            topic = datastore_profile.topic
         else:
             brokers = attributes.pop(
                 "brokers", attributes.pop("bootstrap_servers", None)
