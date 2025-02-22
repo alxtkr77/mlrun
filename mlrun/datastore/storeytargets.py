@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from urllib.parse import urlparse
 
 import storey
 from mergedeep import merge
@@ -134,12 +133,11 @@ class KafkaStoreyTarget(storey.KafkaTarget):
                 mlrun.datastore.datastore_profile.datastore_profile_read(path)
             )
             attributes = merge(attributes, datastore_profile.attributes())
-            brokers = attributes.pop("brokers", None)
-            # Override the topic with the one in the url (if any)
-            parsed = urlparse(path)
-            topic = (
-                parsed.path.strip("/") if parsed.path else datastore_profile.get_topic()
+            brokers = attributes.pop(
+                "brokers", attributes.pop("bootstrap_servers", None)
             )
+            # Override the topic with the one in the url (if any)
+            datastore_profile.get_topic()
         else:
             brokers = attributes.pop(
                 "brokers", attributes.pop("bootstrap_servers", None)
@@ -150,14 +148,7 @@ class KafkaStoreyTarget(storey.KafkaTarget):
             raise mlrun.errors.MLRunInvalidArgumentError("KafkaTarget requires a topic")
         kwargs["brokers"] = brokers
         kwargs["topic"] = topic
-
-        attributes = mlrun.datastore.utils.KafkaParameters(attributes).producer()
-
-        from mlrun.utils.debug import debug_info
-
-        debug_info({"producer_options": attributes, "kwargs": kwargs})
-
-        super().__init__(*args, **kwargs, producer_options=attributes)
+        super().__init__(*args, **kwargs, **attributes)
 
 
 class NoSqlStoreyTarget(storey.NoSqlTarget):
