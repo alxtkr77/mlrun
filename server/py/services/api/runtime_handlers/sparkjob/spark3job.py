@@ -21,7 +21,7 @@ from typing import Optional
 from kubernetes import client as k8s_client
 from kubernetes.client.rest import ApiException
 from sqlalchemy.orm import Session
-
+from mlrun.utils import wrap_object_with_tracing
 import mlrun.common.constants as mlrun_constants
 import mlrun.utils.regex
 from mlrun.common.runtimes.constants import RunStates, SparkApplicationStates
@@ -82,6 +82,10 @@ class Spark3RuntimeHandler(KubeRuntimeHandler, abc.ABC):
     class_modes = {
         RuntimeClassMode.run: "spark",
     }
+    def __init__(self,*args, **kwargs):
+        wrap_object_with_tracing(self)
+        super().__init__(*args, **kwargs)
+
 
     def run(
         self,
@@ -206,6 +210,9 @@ with ctx:
         update_in(job, "spec.deps", runtime.spec.deps)
 
         spark_conf = runtime.spec.spark_conf
+        from mlrun.utils.debug import  debug_info
+        debug_info(spark_conf)
+        
         if spark_conf:
             if (
                 spark_conf.get("spark.eventLog.enabled")
@@ -339,6 +346,9 @@ with ctx:
                     runtime.spec.command,
                 )
             update_in(job, "spec.mainApplicationFile", runtime.spec.command)
+        from mlrun.utils.debug import  debug_info
+        debug_info(runtime.spec)
+        debug_info(str)
 
         verify_list_and_update_in(job, "spec.arguments", runtime.spec.args or [], str)
         self._submit_spark_job(runtime, job, meta, code)
