@@ -209,6 +209,8 @@ class Spark3JobSpec(KubeResourceSpec):
 
         self.driver_resources = driver_resources or {}
         self.executor_resources = executor_resources or {}
+        from mlrun.utils.debug import  debug_info
+        debug_info(spark_conf)
         self.spark_conf = spark_conf or {}
         self.hadoop_conf = hadoop_conf or {}
         self.job_type = job_type

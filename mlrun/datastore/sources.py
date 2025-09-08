@@ -127,6 +127,10 @@ class BaseSourceDriver(DataSource):
             spark_options = self.get_spark_options()
             logger.info(f'spark_options: {spark_options}')
             spark_format = spark_options.pop("format", None)
+            all_configs = session.sparkContext.getConf().getAll()
+            # Print all configurations
+            for config in all_configs:
+                print(f"spark_config: {config[0]}: {config[1]}")
             df = load_spark_dataframe_with_options(
                 session, spark_options, format=spark_format
             )
