@@ -269,19 +269,39 @@ def _compile_function_config(
                 )
             )
 
-    # Configure init container for Application runtime when source needs runtime loading
-    if function.kind == mlrun.runtimes.RuntimeKinds.application:
-        if not sidecars:
-            raise mlrun.errors.MLRunInvalidArgumentError(
-                f"No sidecar found for Application runtime '{function.metadata.name}'. "
-                "Application runtime requires a sidecar container to run the user's application. "
-                "Ensure the application image is set via 'spec.image' or 'with_sidecar()'."
-            )
-        if _should_fetch_source_code(function):
+    # Configure init container when source needs runtime loading
+    # (store:// URIs, git with pull_at_runtime, etc.)
+    if _should_fetch_source_code(function):
+        if function.kind == mlrun.runtimes.RuntimeKinds.application:
+            if not sidecars:
+                raise mlrun.errors.MLRunInvalidArgumentError(
+                    f"No sidecar found for Application runtime '{function.metadata.name}'. "
+                    "Application runtime requires a sidecar container to run the user's application. "
+                    "Ensure the application image is set via 'spec.image' or 'with_sidecar()'."
+                )
             _configure_source_loader_init_container(
                 function,
                 # Application runtime has exactly one sidecar (the user's application container)
-                sidecar=sidecars[0],
+                container=sidecars[0],
+                client_version=client_version,
+                client_python_version=client_python_version,
+            )
+        else:
+            # Vanilla Nuclio/Serving: save store:// URI, clear source to skip Nuclio builder
+            source = function.spec.build.source
+            function.status.application_source = source
+            function.spec.build.source = ""
+
+            # After clearing spec.build.source, the condition further down
+            # (base_spec or functionSourceCode or source or serving) may all be falsy
+            # for vanilla nuclio, causing it to fall into nuclio.build_file() which fails.
+            # Ensure base_spec is set so the function takes the config path.
+            if not function.spec.base_spec:
+                function.spec.base_spec = nuclio.config.new_config()
+
+            _configure_source_loader_init_container(
+                function,
+                container=None,  # patch main function container, not a sidecar
                 client_version=client_version,
                 client_python_version=client_python_version,
             )
@@ -800,26 +820,32 @@ def _should_fetch_source_code(
 
 def _configure_source_loader_init_container(
     function: mlrun.runtimes.nuclio.function.RemoteRuntime,
-    sidecar: dict,
+    container: dict | None = None,
     client_version: str | None = None,
     client_python_version: str | None = None,
 ):
     """
-    Configure an init container for Application runtime to load source code at runtime.
+    Configure an init container to load source code at runtime.
 
-    This function sets up a Kubernetes init container that runs before the main sidecar
+    This function sets up a Kubernetes init container that runs before the main
     container starts. The init container is responsible for fetching source code from
     remote locations (store:// URIs, git repos, archives) and extracting it to a shared
-    volume that the sidecar can access.
+    volume that the target container can access.
 
     The setup involves:
-    1. Creating an emptyDir volume shared between init container and sidecar
+    1. Creating an emptyDir volume shared between init container and target container
     2. Building an init container spec that runs `mlrun load-source` command
     3. Adding the init container to the function's Nuclio spec
-    4. Patching the sidecar to mount the shared volume and set PYTHONPATH
+    4. Patching the target container to mount the shared volume and set PYTHONPATH
+
+    When ``container`` is provided (Application runtime), it is patched directly with
+    the volume mount, workingDir, and PYTHONPATH.  When ``container`` is None (vanilla
+    Nuclio/Serving), PYTHONPATH is injected via ``function.spec.config`` (Nuclio CRD
+    env vars) and the volume mount is handled by ``function.spec.with_volume_mounts()``.
 
     :param function: The function object to configure
-    :param sidecar: The sidecar container dict (the user's application container)
+    :param container: The target container dict to patch (e.g. sidecar). When None,
+        the main Nuclio function container is patched instead.
     :param client_version: Client version for resolving the init container image
     :param client_python_version: Client Python version for resolving the init container image
     """
@@ -837,7 +863,7 @@ def _configure_source_loader_init_container(
     volume = {"name": volume_name, "emptyDir": {}}
     volume_mount = {"name": volume_name, "mountPath": target_dir}
 
-    # Add volume to function spec so both init container and sidecar can access it
+    # Add volume to function spec so both init container and target container can access it
     function.spec.with_volumes(volume)
     function.spec.with_volume_mounts(volume_mount)
 
@@ -854,13 +880,21 @@ def _configure_source_loader_init_container(
     # Add init container to function spec (idempotently - replaces if exists)
     _ensure_source_loader_init_container(function, init_container)
 
-    _patch_sidecar_for_source(
-        sidecar=sidecar,
-        volume_name=volume_name,
-        volume_mount=volume_mount,
-        target_dir=target_dir,
-        workdir=workdir,
-    )
+    if container is not None:
+        _patch_container_for_source(
+            container=container,
+            volume_name=volume_name,
+            volume_mount=volume_mount,
+            target_dir=target_dir,
+            workdir=workdir,
+        )
+    else:
+        # For vanilla Nuclio/serving: patch the main function container
+        _patch_main_function_container(
+            function=function,
+            target_dir=target_dir,
+            workdir=workdir,
+        )
 
     logger.debug(
         "Configured source loader init container",
@@ -940,30 +974,30 @@ def _ensure_source_loader_init_container(
         init_containers.append(init_container)
 
 
-def _patch_sidecar_for_source(
-    sidecar: dict,
+def _patch_container_for_source(
+    container: dict,
     volume_name: str,
     volume_mount: dict,
     target_dir: str,
     workdir: str | None = None,
 ):
     """
-    Patch sidecar container with volume mount, workingDir, and PYTHONPATH.
+    Patch container with volume mount, workingDir, and PYTHONPATH.
 
-    :param sidecar: The sidecar container dict
+    :param container: The container dict (e.g. sidecar or main function container)
     :param volume_name: Name of the source volume
     :param volume_mount: Volume mount configuration
     :param target_dir: Target directory where source code is extracted
     :param workdir: Working directory relative to target_dir (e.g. 'subdir') or absolute path
-                    on the container filesystem. When set, the sidecar runs from this directory
+                    on the container filesystem. When set, the container runs from this directory
                     instead of the target_dir root.
     """
     # Add volume mount idempotently
-    sidecar_mounts = sidecar.setdefault("volumeMounts", [])
-    if not any(vm.get("name") == volume_name for vm in sidecar_mounts):
-        sidecar_mounts.append(volume_mount)
+    container_mounts = container.setdefault("volumeMounts", [])
+    if not any(vm.get("name") == volume_name for vm in container_mounts):
+        container_mounts.append(volume_mount)
 
-    # Resolve the effective working directory for the sidecar.
+    # Resolve the effective working directory for the container.
     # workdir can be relative (joined with target_dir) or absolute (used as-is).
     if workdir:
         if os.path.isabs(workdir):
@@ -973,13 +1007,13 @@ def _patch_sidecar_for_source(
     else:
         resolved_workdir = target_dir
 
-    sidecar["workingDir"] = resolved_workdir
+    container["workingDir"] = resolved_workdir
 
-    # Set PYTHONPATH so the sidecar can import modules from the source directory.
+    # Set PYTHONPATH so the container can import modules from the source directory.
     # If PYTHONPATH already exists (user-defined), prepend our path to preserve theirs.
-    sidecar_env = sidecar.setdefault("env", [])
+    container_env = container.setdefault("env", [])
     pythonpath_env = next(
-        (e for e in sidecar_env if e.get("name") == "PYTHONPATH"), None
+        (e for e in container_env if e.get("name") == "PYTHONPATH"), None
     )
     if pythonpath_env:
         existing_path = pythonpath_env.get("value", "")
@@ -990,4 +1024,46 @@ def _patch_sidecar_for_source(
                 else resolved_workdir
             )
     else:
-        sidecar_env.append({"name": "PYTHONPATH", "value": resolved_workdir})
+        container_env.append({"name": "PYTHONPATH", "value": resolved_workdir})
+
+
+def _patch_main_function_container(
+    function: mlrun.runtimes.nuclio.function.RemoteRuntime,
+    target_dir: str,
+    workdir: str | None = None,
+):
+    """
+    Patch the main Nuclio function container with PYTHONPATH.
+
+    Unlike sidecars (which are plain dicts), the main container's properties
+    are injected via function.spec.config which feeds directly into the Nuclio CRD.
+    Volume mounts are already handled by function.spec.with_volume_mounts()
+    (called by the parent function).
+
+    :param function: The function object to configure
+    :param target_dir: Target directory where source code is extracted
+    :param workdir: Working directory relative to target_dir or absolute path
+    """
+    if workdir:
+        if os.path.isabs(workdir):
+            resolved_workdir = workdir
+        else:
+            resolved_workdir = os.path.join(target_dir, workdir)
+    else:
+        resolved_workdir = target_dir
+
+    # Inject PYTHONPATH directly into the Nuclio config spec.
+    # We use function.spec.config (not function.spec.env) because
+    # _resolve_env_vars() has already run by the time this is called.
+    env_list = function.spec.config.setdefault("spec.env", [])
+    pythonpath_env = next((e for e in env_list if e.get("name") == "PYTHONPATH"), None)
+    if pythonpath_env:
+        existing_path = pythonpath_env.get("value", "")
+        if resolved_workdir not in existing_path.split(":"):
+            pythonpath_env["value"] = (
+                f"{resolved_workdir}:{existing_path}"
+                if existing_path
+                else resolved_workdir
+            )
+    else:
+        env_list.append({"name": "PYTHONPATH", "value": resolved_workdir})
