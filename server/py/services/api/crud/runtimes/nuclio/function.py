@@ -40,6 +40,7 @@ import framework.utils.singletons.k8s
 import services.api.crud.runtimes.nuclio.helpers
 import services.api.runtime_handlers
 import services.api.utils.builder
+import services.api.utils.functions
 from services.api.crud.runtimes.nuclio.helpers import pure_nuclio_deployed_restricted
 
 
@@ -272,6 +273,11 @@ def _compile_function_config(
     # Configure init container when source needs runtime loading
     # (store:// URIs, git with pull_at_runtime, etc.)
     if _should_fetch_source_code(function):
+        # Merge artifact requirements into function build spec (all runtime kinds)
+        services.api.utils.functions.enrich_function_from_code_artifact(
+            function, project
+        )
+
         if function.kind == mlrun.runtimes.RuntimeKinds.application:
             if not sidecars:
                 raise mlrun.errors.MLRunInvalidArgumentError(
