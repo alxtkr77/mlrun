@@ -298,12 +298,27 @@ def _compile_function_config(
             function.status.application_source = source
             function.spec.build.source = ""
 
-            # After clearing spec.build.source, the condition further down
-            # (base_spec or functionSourceCode or source or serving) may all be falsy
-            # for vanilla nuclio, causing it to fall into nuclio.build_file() which fails.
-            # Ensure base_spec is set so the function takes the config path.
+            # Set base_spec so _compile_function_config takes the config path
+            # (not the build_file path which would fail without a source file).
             if not function.spec.base_spec:
                 function.spec.base_spec = nuclio.config.new_config()
+
+            # Set a wrapper as functionSourceCode that re-exports the handler
+            # from the init-container-loaded code (via PYTHONPATH).
+            # This lets Nuclio build normally using the base image.
+            handler_str = function.spec.function_handler or "main:handler"
+            if ":" in handler_str:
+                module_name, func_name = handler_str.split(":", 1)
+            else:
+                module_name, func_name = handler_str, "handler"
+            wrapper = f"from {module_name} import {func_name} as handler\n"
+            import base64
+
+            function.spec.build.functionSourceCode = base64.b64encode(
+                wrapper.encode("utf-8")
+            ).decode("utf-8")
+            # Override handler to point to the wrapper module
+            function.spec.function_handler = "handler:handler"
 
             _configure_source_loader_init_container(
                 function,
@@ -933,8 +948,16 @@ def _build_source_loader_init_container(
     """
     project = function.metadata.project
 
+    # Use the function's image for the init container if available,
+    # otherwise fall back to the default base image. The function image
+    # already has the MLRun SDK and avoids registry path mismatches.
+    init_image_base = (
+        function.spec.image
+        or function.spec.build.base_image
+        or mlrun.mlconf.default_base_image
+    )
     init_container_image = services.api.utils.builder.resolve_and_enrich_image_target(
-        mlrun.mlconf.default_base_image,
+        init_image_base,
         client_version=client_version,
         client_python_version=client_python_version,
     )

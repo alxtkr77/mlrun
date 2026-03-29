@@ -29,7 +29,9 @@ class TestCodeArtifact(TestMLRunSystem):
     """System tests for loading functions from store:// code artifacts (ML-11980)."""
 
     project_name = "code-artifact-system-test"
-    image = "artifactory.iguazeng.com:10557/mlrun:unstable"
+    # Use default mlrun/mlrun image — the cluster's installed mlrun image.
+    # Don't specify an external registry path to avoid Nuclio runRegistry prefix issues.
+    image = "mlrun/mlrun"
 
     @classmethod
     def custom_setup_class(cls):
@@ -47,10 +49,8 @@ class TestCodeArtifact(TestMLRunSystem):
         mlrun.get_dataitem(path).put(code.encode())
 
     def _set_function(self, **kwargs):
-        """Set function with image_pull_policy=Always to avoid stale cached images."""
-        func = self.project.set_function(image=self.image, **kwargs)
-        func.spec.image_pull_policy = "Always"
-        return func
+        """Set function with the test image."""
+        return self.project.set_function(image=self.image, **kwargs)
 
     def test_job_function_from_store_artifact(self):
         """Job function loads code from store:// artifact pointing to v3io."""

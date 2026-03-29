@@ -49,7 +49,7 @@ class Constants:
     alerts = "mlrun-alerts"
     targets_to_image_name = {
         api: api_container,
-        mlrun: mlrun,
+        mlrun: "mlrun/mlrun",
         mlrun_kfp: mlrun_kfp,
         log_collector: log_collector,
     }
