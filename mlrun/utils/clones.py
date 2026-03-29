@@ -311,7 +311,9 @@ def _load_store_artifact(
             f"Failed to download artifact from {artifact_target_path} to {local_file_path}"
         ) from exc
 
-    return local_file_path
+    # Return the directory (not the file path) so that callers like _pre_run()
+    # can set it as the working directory and add it to sys.path for imports.
+    return target_dir
 
 
 def _load_git_source(source_uri: str, target_dir: str) -> str:
