@@ -26,6 +26,7 @@ class CodeArtifactSpec(ArtifactSpec):
     _dict_fields = ArtifactSpec._dict_fields + [
         "language",
         "code_type",
+        "requirements",
     ]
 
     def __init__(
@@ -41,6 +42,7 @@ class CodeArtifactSpec(ArtifactSpec):
         body=None,
         language=None,
         code_type=None,
+        requirements=None,
     ):
         super().__init__(
             src_path=src_path,
@@ -55,6 +57,7 @@ class CodeArtifactSpec(ArtifactSpec):
         )
         self.language = language
         self.code_type = code_type
+        self.requirements = requirements
 
 
 class CodeArtifact(Artifact):
@@ -75,6 +78,7 @@ class CodeArtifact(Artifact):
         src_path=None,
         language=None,
         code_type=None,
+        requirements=None,
         **kwargs,
     ):
         """
@@ -85,6 +89,7 @@ class CodeArtifact(Artifact):
         :param src_path:     Path to the local code file or archive
         :param language:     Programming language and version (e.g. "python:3.9")
         :param code_type:    Type of code: "function" or "workflow" (default: "function")
+        :param requirements: List of dependency strings (e.g. ["pandas>=2.0", "numpy"])
         """
         super().__init__(
             key,
@@ -98,6 +103,7 @@ class CodeArtifact(Artifact):
         self.spec.code_type = CodeArtifactCodeType(
             code_type or CodeArtifactCodeType.function
         )
+        self.spec.requirements = requirements
 
     @property
     def spec(self) -> CodeArtifactSpec:

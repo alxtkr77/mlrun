@@ -832,6 +832,7 @@ class MLClientCtx:
         db_key=None,
         language=None,
         code_type: str | mlrun.artifacts.code.CodeArtifactCodeType | None = None,
+        requirements: list[str] | None = None,
         **kwargs,
     ) -> CodeArtifact:
         """Log a code artifact and optionally upload it to datastore
@@ -847,6 +848,7 @@ class MLClientCtx:
         :param db_key:        The key to use in the artifact DB table
         :param language:      Programming language and version (e.g. "python:3.9")
         :param code_type:     Type of code: "function" or "workflow" (default: "function")
+        :param requirements:  List of dependency strings (e.g. ["pandas>=2.0", "numpy"])
 
         :returns: Code artifact object
         """
@@ -856,6 +858,7 @@ class MLClientCtx:
             src_path=local_path,
             language=language,
             code_type=code_type,
+            requirements=requirements,
             **kwargs,
         )
 

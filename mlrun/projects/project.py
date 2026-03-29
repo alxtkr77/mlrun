@@ -1795,6 +1795,7 @@ class MlrunProject(ModelObj):
         target_path="",
         language=None,
         code_type: str | mlrun.artifacts.code.CodeArtifactCodeType | None = None,
+        requirements: list[str] | None = None,
         **kwargs,
     ) -> CodeArtifact:
         """
@@ -1810,6 +1811,7 @@ class MlrunProject(ModelObj):
         :param target_path:   absolute target path (instead of using artifact_path + local_path)
         :param language:      programming language and version (e.g. "python:3.9")
         :param code_type:     type of code: "function" or "workflow" (default: "function")
+        :param requirements:  list of dependency strings (e.g. ["pandas>=2.0", "numpy"])
 
         :returns: code artifact object
         """
@@ -1819,6 +1821,7 @@ class MlrunProject(ModelObj):
             src_path=local_path,
             language=language,
             code_type=code_type,
+            requirements=requirements,
             **kwargs,
         )
 

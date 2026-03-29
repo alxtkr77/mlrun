@@ -780,6 +780,7 @@ class TestCodeArtifact:
             == mlrun.artifacts.code.CodeArtifactCodeType.function
         )
         assert artifact.spec.language is None
+        assert artifact.spec.requirements is None
 
     def test_create_with_language_and_code_type(self):
         artifact = mlrun.artifacts.CodeArtifact(
@@ -807,21 +808,35 @@ class TestCodeArtifact:
         with pytest.raises(ValueError):
             mlrun.artifacts.CodeArtifact(key="bad", code_type="invalid")
 
-    def test_serialization_roundtrip(self):
+    def test_create_with_requirements(self):
+        requirements = ["pandas>=2.0", "numpy", "scikit-learn"]
         artifact = mlrun.artifacts.CodeArtifact(
             key="my-code",
             language="python:3.9",
             code_type="function",
+            requirements=requirements,
+        )
+        assert artifact.spec.requirements == requirements
+
+    def test_serialization_roundtrip(self):
+        requirements = ["pandas>=2.0", "numpy"]
+        artifact = mlrun.artifacts.CodeArtifact(
+            key="my-code",
+            language="python:3.9",
+            code_type="function",
+            requirements=requirements,
         )
         artifact_dict = artifact.to_dict()
         assert artifact_dict["kind"] == "code"
         assert artifact_dict["spec"]["language"] == "python:3.9"
         assert artifact_dict["spec"]["code_type"] == "function"
+        assert artifact_dict["spec"]["requirements"] == requirements
 
         restored = mlrun.artifacts.manager.dict_to_artifact(artifact_dict)
         assert isinstance(restored, mlrun.artifacts.CodeArtifact)
         assert restored.spec.language == artifact.spec.language
         assert restored.spec.code_type == artifact.spec.code_type
+        assert restored.spec.requirements == artifact.spec.requirements
 
     def test_registered_in_artifact_types(self):
         assert "code" in mlrun.artifacts.manager.artifact_types
@@ -849,12 +864,14 @@ class TestCodeArtifact:
         assert exclude
 
     def test_log_code_file_via_project(self, new_project_factory):
+        requirements = ["pandas>=2.0", "numpy"]
         project = new_project_factory("test-code-proj", save=False)
         artifact = project.log_code_file(
             "my-func",
             body="def handler(): pass",
             language="python:3.9",
             code_type="function",
+            requirements=requirements,
             is_inline=True,
             artifact_path=str(results_dir),
         )
@@ -865,14 +882,17 @@ class TestCodeArtifact:
             artifact.spec.code_type
             == mlrun.artifacts.code.CodeArtifactCodeType.function
         )
+        assert artifact.spec.requirements == requirements
 
     def test_log_code_file_via_context(self, ensure_project):
+        requirements = ["requests", "boto3>=1.26"]
         context = mlrun.get_or_create_ctx("test")
         artifact = context.log_code_file(
             "my-func",
             body="def handler(): pass",
             language="python:3.11",
             code_type="workflow",
+            requirements=requirements,
             is_inline=True,
             artifact_path=str(results_dir),
         )
@@ -883,6 +903,7 @@ class TestCodeArtifact:
             artifact.spec.code_type
             == mlrun.artifacts.code.CodeArtifactCodeType.workflow
         )
+        assert artifact.spec.requirements == requirements
 
     def test_log_code_file_with_local_file(self, tmp_path, new_project_factory):
         code_file = tmp_path / "my_func.py"
