@@ -224,3 +224,68 @@ class TestCodeArtifact(TestMLRunSystem):
         # Next run should get V2 (job downloads fresh each time)
         run2 = func.run(local=False)
         assert run2.status.results.get("return") == "v2"
+
+    def test_job_function_from_store_artifact_with_requirements(self):
+        """Job function from store:// artifact with requirements gets deps installed at build time."""
+        # Use 'requests' as a test package — it's common but may not be in base image
+        code = (
+            "import requests\n"
+            "def handler(context):\n"
+            "    context.log_result('requests_version', requests.__version__)\n"
+        )
+        s3_path = self._s3_path("func_with_deps.py")
+        self._upload_code(s3_path, code)
+
+        self.project.log_code_file(
+            "func-with-deps",
+            target_path=s3_path,
+            language="python",
+            code_type="function",
+            requirements=["requests"],
+        )
+
+        func = self.project.set_function(
+            func=f"store://artifacts/{self.project_name}/func-with-deps",
+            name="job-with-deps",
+            kind="job",
+            handler="handler",
+            image=self.image,
+        )
+
+        run = func.run(local=False)
+        assert run.status.state == "completed"
+        assert run.status.results.get("requests_version")
+
+    def test_nuclio_function_from_store_artifact_with_requirements(self):
+        """Nuclio function from store:// artifact with requirements gets deps installed at build time."""
+        code = (
+            "import requests\n"
+            "def handler(context, event):\n"
+            "    return context.Response(\n"
+            "        body=requests.__version__,\n"
+            "        content_type='text/plain',\n"
+            "    )\n"
+        )
+        s3_path = self._s3_path("nuclio_with_deps.py")
+        self._upload_code(s3_path, code)
+
+        self.project.log_code_file(
+            "nuclio-with-deps",
+            target_path=s3_path,
+            language="python",
+            code_type="function",
+            requirements=["requests"],
+        )
+
+        func = self.project.set_function(
+            func=f"store://artifacts/{self.project_name}/nuclio-with-deps",
+            name="nuclio-with-deps",
+            kind="nuclio",
+            handler="handler:handler",
+            image=self.image,
+        )
+        self.project.deploy_function("nuclio-with-deps")
+
+        resp = func.invoke("")
+        # Should return the requests version string (not an import error)
+        assert resp.decode().strip()
