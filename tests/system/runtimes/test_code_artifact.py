@@ -114,7 +114,7 @@ class TestCodeArtifact(TestMLRunSystem):
             func=f"store://artifacts/{self.project_name}/nuclio-code",
             name="nuclio-from-artifact",
             kind="nuclio",
-            handler="handler:handler",
+            handler="nuclio_func:handler",
         )
         self.project.deploy_function("nuclio-from-artifact")
 
@@ -149,20 +149,22 @@ class TestCodeArtifact(TestMLRunSystem):
             func=store_uri,
             name="func-a",
             kind="job",
-            handler="handler",
+            handler="shared.handler",
         )
         func_b = self._set_function(
             func=store_uri,
             name="func-b",
             kind="job",
-            handler="handler",
+            handler="shared.handler",
         )
 
-        run_a = func_a.run(local=False)
-        run_b = func_b.run(local=False)
+        run_a = func_a.run(local=False, watch=False)
+        run_b = func_b.run(local=False, watch=False)
+        run_a.wait_for_completion(timeout=300)
+        run_b.wait_for_completion(timeout=300)
 
-        assert run_a.status.state == "completed"
-        assert run_b.status.state == "completed"
+        assert run_a.status.state == "completed", f"func-a failed: {run_a.status.error}"
+        assert run_b.status.state == "completed", f"func-b failed: {run_b.status.error}"
         assert run_a.status.results.get("return") == "shared-code"
         assert run_b.status.results.get("return") == "shared-code"
 
@@ -185,9 +187,11 @@ class TestCodeArtifact(TestMLRunSystem):
             func=f"store://artifacts/{self.project_name}/versioned-code",
             name="versioned-func",
             kind="job",
-            handler="handler",
+            handler="versioned.handler",
         )
-        run1 = func.run(local=False)
+        run1 = func.run(local=False, watch=False)
+        run1.wait_for_completion(timeout=300)
+        assert run1.status.state == "completed", f"V1 run failed: {run1.status.error}"
         assert run1.status.results.get("return") == "v1"
 
         # V2 -- update the file at the same path
@@ -197,7 +201,9 @@ class TestCodeArtifact(TestMLRunSystem):
         )
 
         # Next run should get V2 (job downloads fresh each time)
-        run2 = func.run(local=False)
+        run2 = func.run(local=False, watch=False)
+        run2.wait_for_completion(timeout=300)
+        assert run2.status.state == "completed", f"V2 run failed: {run2.status.error}"
         assert run2.status.results.get("return") == "v2"
 
     def test_job_function_from_store_artifact_with_requirements(self):
@@ -222,11 +228,12 @@ class TestCodeArtifact(TestMLRunSystem):
             func=f"store://artifacts/{self.project_name}/func-with-deps",
             name="job-with-deps",
             kind="job",
-            handler="handler",
+            handler="func_with_deps.handler",
         )
 
-        run = func.run(local=False)
-        assert run.status.state == "completed"
+        run = func.run(local=False, watch=False)
+        run.wait_for_completion(timeout=300)
+        assert run.status.state == "completed", f"Run failed: {run.status.error}"
         assert run.status.results.get("requests_version")
 
     def test_nuclio_function_from_store_artifact_with_requirements(self):
@@ -254,7 +261,7 @@ class TestCodeArtifact(TestMLRunSystem):
             func=f"store://artifacts/{self.project_name}/nuclio-with-deps",
             name="nuclio-with-deps",
             kind="nuclio",
-            handler="handler:handler",
+            handler="nuclio_with_deps:handler",
         )
         self.project.deploy_function("nuclio-with-deps")
 
