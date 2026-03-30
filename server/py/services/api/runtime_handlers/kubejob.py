@@ -123,9 +123,12 @@ class KubeRuntimeHandler(BaseRuntimeHandler):
         if code:
             extra_env.append({"name": "MLRUN_EXEC_CODE", "value": code})
 
-        # store:// artifact URIs must always be loaded at runtime (pod can't resolve at build time)
-        if runtime.spec.build.source and mlrun.datastore.is_store_uri(
+        # store:// artifact URIs default to runtime loading for jobs
+        # (pod resolves at startup via extract_source → load_source_code)
+        if (
             runtime.spec.build.source
+            and mlrun.datastore.is_store_uri(runtime.spec.build.source)
+            and not runtime.spec.build.load_source_on_run
         ):
             runtime.spec.build.load_source_on_run = True
 

@@ -160,10 +160,36 @@ def enrich_function_from_code_artifact(
         ) from exc
 
     artifact_requirements = getattr(artifact.spec, "requirements", None)
-    if not artifact_requirements:
-        return
+    if artifact_requirements:
+        function.spec.build.requirements = mlrun.utils.merge_requirements(
+            reqs_priority=function.spec.build.requirements or [],
+            reqs_secondary=artifact_requirements,
+        )
 
-    function.spec.build.requirements = mlrun.utils.merge_requirements(
-        reqs_priority=function.spec.build.requirements or [],
-        reqs_secondary=artifact_requirements,
-    )
+
+def resolve_code_artifact_content(source: str, project: str) -> str:
+    """Resolve store:// artifact and download its code content.
+
+    :param source:  The store:// URI
+    :param project: Project name for artifact resolution
+    :returns: The code content as a string
+    """
+    try:
+        artifact = mlrun.datastore.get_store_resource(source, project=project)
+    except Exception as exc:
+        raise mlrun.errors.MLRunInvalidArgumentError(
+            f"Cannot resolve code artifact {source}: {err_to_str(exc)}"
+        ) from exc
+
+    target_path = artifact.get_target_path()
+    if not target_path:
+        raise mlrun.errors.MLRunInvalidArgumentError(
+            f"Code artifact {source} has no target path"
+        )
+
+    try:
+        return mlrun.get_dataitem(target_path).get().decode("utf-8")
+    except Exception as exc:
+        raise mlrun.errors.MLRunRuntimeError(
+            f"Failed to download code artifact from {target_path}: {err_to_str(exc)}"
+        ) from exc

@@ -164,11 +164,25 @@ def test_resolve_nuclio_runtime_python_image(
     )
 
 
-def test_nuclio_store_uri_should_fetch_source():
-    """_should_fetch_source_code returns True for nuclio with store:// source."""
+def test_nuclio_store_uri_should_not_fetch_source_by_default():
+    """_should_fetch_source_code returns False for store:// when load_source_on_run=False (default)."""
     func = mlrun.new_function("test-func", kind="nuclio")
     func.metadata.project = "test-proj"
     func.spec.build.source = "store://artifacts/test-proj/my_code"
+
+    # Default: load_source_on_run=False → build-time resolution, no init container
+    assert (
+        services.api.crud.runtimes.nuclio.function._should_fetch_source_code(func)
+        is False
+    )
+
+
+def test_nuclio_store_uri_should_fetch_source_when_runtime_mode():
+    """_should_fetch_source_code returns True for store:// with load_source_on_run=True."""
+    func = mlrun.new_function("test-func", kind="nuclio")
+    func.metadata.project = "test-proj"
+    func.spec.build.source = "store://artifacts/test-proj/my_code"
+    func.spec.build.load_source_on_run = True
 
     assert (
         services.api.crud.runtimes.nuclio.function._should_fetch_source_code(func)
@@ -181,6 +195,7 @@ def test_nuclio_store_source_preserved_on_redeploy():
     func = mlrun.new_function("test-func", kind="nuclio")
     func.metadata.project = "test-proj"
     func.spec.build.source = "store://artifacts/test-proj/my_code"
+    func.spec.build.load_source_on_run = True
 
     # Simulate first deploy: source saved, then cleared
     func.status.application_source = func.spec.build.source

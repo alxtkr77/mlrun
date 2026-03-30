@@ -92,7 +92,11 @@ class TestCodeArtifact(TestMLRunSystem):
         assert mlrun.datastore.is_store_uri(db_func.spec.build.source)
 
     def test_nuclio_function_from_store_artifact(self):
-        """Nuclio function uses init container to load code from store:// artifact."""
+        """Nuclio function with store:// — build-time mode (default).
+
+        Server resolves artifact, embeds code as functionSourceCode.
+        No init container needed.
+        """
         code = (
             "def handler(context, event):\n"
             "    return context.Response(\n"
@@ -116,6 +120,7 @@ class TestCodeArtifact(TestMLRunSystem):
             kind="nuclio",
             handler="nuclio_func:handler",
         )
+        # Default: load_source_on_run=False → build-time resolution
         self.project.deploy_function("nuclio-from-artifact")
 
         resp = func.invoke("")
@@ -127,6 +132,41 @@ class TestCodeArtifact(TestMLRunSystem):
             assert "V3IO_ACCESS_KEY" not in str(
                 value
             ), f"Credential leak in {key}"
+
+    def test_nuclio_function_from_store_artifact_runtime_mode(self):
+        """Nuclio function with store:// — runtime mode (load_source_on_run=True).
+
+        Init container downloads code at pod startup. Wrapper imports handler
+        from PYTHONPATH. Code updates without rebuild.
+        """
+        code = (
+            "def handler(context, event):\n"
+            "    return context.Response(\n"
+            "        body='runtime-mode',\n"
+            "        content_type='text/plain',\n"
+            "    )\n"
+        )
+        v3io_path = self._v3io_path("nuclio_rt.py")
+        self._upload_code(v3io_path, code)
+
+        self.project.log_code_file(
+            "nuclio-rt-code",
+            target_path=v3io_path,
+            language="python",
+            code_type="function",
+        )
+
+        func = self._set_function(
+            func=f"store://artifacts/{self.project_name}/nuclio-rt-code",
+            name="nuclio-runtime-mode",
+            kind="nuclio",
+            handler="nuclio_rt:handler",
+        )
+        func.spec.build.load_source_on_run = True
+        self.project.deploy_function("nuclio-runtime-mode")
+
+        resp = func.invoke("")
+        assert resp.decode() == "runtime-mode"
 
     def test_shared_artifact_across_functions(self):
         """Two job functions reference the same store:// artifact."""

@@ -270,14 +270,18 @@ def _compile_function_config(
                 )
             )
 
-    # Configure init container when source needs runtime loading
-    # (store:// URIs, git with pull_at_runtime, etc.)
-    if _should_fetch_source_code(function):
-        # Merge artifact requirements into function build spec (all runtime kinds)
+    # For store:// sources, merge artifact requirements into build spec (both modes)
+    source = function.spec.build.source or getattr(
+        function.status, "application_source", None
+    )
+    if source and mlrun.datastore.is_store_uri(source):
         services.api.utils.functions.enrich_function_from_code_artifact(
             function, project
         )
 
+    # Configure init container when source needs runtime loading
+    # (store://, git, archive with load_source_on_run=True)
+    if _should_fetch_source_code(function):
         if function.kind == mlrun.runtimes.RuntimeKinds.application:
             if not sidecars:
                 raise mlrun.errors.MLRunInvalidArgumentError(
@@ -287,7 +291,6 @@ def _compile_function_config(
                 )
             _configure_source_loader_init_container(
                 function,
-                # Application runtime has exactly one sidecar (the user's application container)
                 container=sidecars[0],
                 client_version=client_version,
                 client_python_version=client_python_version,
@@ -298,14 +301,11 @@ def _compile_function_config(
             function.status.application_source = source
             function.spec.build.source = ""
 
-            # Set base_spec so _compile_function_config takes the config path
-            # (not the build_file path which would fail without a source file).
             if not function.spec.base_spec:
                 function.spec.base_spec = nuclio.config.new_config()
 
             # Set a wrapper as functionSourceCode that re-exports the handler
             # from the init-container-loaded code (via PYTHONPATH).
-            # This lets Nuclio build normally using the base image.
             handler_str = function.spec.function_handler or "main:handler"
             if ":" in handler_str:
                 module_name, func_name = handler_str.split(":", 1)
@@ -317,15 +317,30 @@ def _compile_function_config(
             function.spec.build.functionSourceCode = base64.b64encode(
                 wrapper.encode("utf-8")
             ).decode("utf-8")
-            # Override handler to point to the wrapper module
             function.spec.function_handler = "handler:handler"
 
             _configure_source_loader_init_container(
                 function,
-                container=None,  # patch main function container, not a sidecar
+                container=None,
                 client_version=client_version,
                 client_python_version=client_python_version,
             )
+
+    # Build-time resolution for store:// sources (load_source_on_run=False)
+    elif source and mlrun.datastore.is_store_uri(source):
+        import base64
+
+        code_content = services.api.utils.functions.resolve_code_artifact_content(
+            source, project
+        )
+        function.spec.build.functionSourceCode = base64.b64encode(
+            code_content.encode("utf-8")
+        ).decode("utf-8")
+        # Clear build.source so Nuclio builder doesn't try to resolve store://
+        function.status.application_source = function.spec.build.source
+        function.spec.build.source = ""
+        if not function.spec.base_spec:
+            function.spec.base_spec = nuclio.config.new_config()
 
     nuclio_spec = nuclio.ConfigSpec(
         env=env_dict,
@@ -828,15 +843,12 @@ def _should_fetch_source_code(
     if not source:
         return False
 
-    # Store artifact URIs always need init container
-    if mlrun.datastore.is_store_uri(source):
-        return True
-
+    is_store_source = mlrun.datastore.is_store_uri(source)
     is_git_source = source.startswith("git://")
     is_archive_source = source.endswith(".tar.gz") or source.endswith(".zip")
-    pull_at_runtime = function.spec.build.load_source_on_run
+    pull_at_runtime = bool(function.spec.build.load_source_on_run)
 
-    return (is_git_source or is_archive_source) and pull_at_runtime
+    return (is_store_source or is_git_source or is_archive_source) and pull_at_runtime
 
 
 def _configure_source_loader_init_container(
