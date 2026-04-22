@@ -16,6 +16,7 @@ import contextlib
 import datetime
 import getpass
 import glob
+import hashlib
 import http
 import importlib.util as imputil
 import json
@@ -48,6 +49,7 @@ import mlrun.common.schemas.artifact
 import mlrun.common.schemas.model_monitoring.constants as mm_constants
 import mlrun.common.schemas.notification
 import mlrun.common.secrets
+import mlrun.datastore
 import mlrun.datastore.datastore_profile
 import mlrun.db
 import mlrun.errors
@@ -3967,8 +3969,50 @@ class MlrunProject(ModelObj):
 
         project_dir = pathlib.Path(project_file_path).parent
         project_dir.mkdir(parents=True, exist_ok=True)
-        with open(project_file_path, "w") as fp:
-            fp.write(self.to_yaml())
+
+        # For zip exports, download store:// function code into the project
+        # context and temporarily rewrite function definitions to use local
+        # paths so the exported project.yaml references files inside the zip.
+        original_sources: dict[str, str] = {}
+        if archive_code:
+            for name, func_def in self.spec._function_definitions.items():
+                store_uri = None
+                if isinstance(func_def, dict):
+                    source = func_def.get("url", "")
+                    if source and mlrun.datastore.is_store_uri(source):
+                        store_uri = source
+                elif hasattr(func_def, "spec") and hasattr(func_def.spec, "build"):
+                    source = getattr(func_def.spec.build, "source", "")
+                    if source and mlrun.datastore.is_store_uri(source):
+                        store_uri = source
+
+                if store_uri:
+                    relative_path = _download_store_artifact_for_export(
+                        project_context=str(project_dir),
+                        store_uri=store_uri,
+                        project_name=self.metadata.name,
+                    )
+                    if relative_path:
+                        original_sources[name] = store_uri
+                        if isinstance(func_def, dict):
+                            func_def["url"] = relative_path
+                        elif hasattr(func_def, "spec"):
+                            func_def.spec.build.source = relative_path
+
+        try:
+            with open(project_file_path, "w") as fp:
+                fp.write(self.to_yaml())
+        finally:
+            # Restore original store:// refs so in-memory state is never corrupted,
+            # even if to_yaml() or the file write raises an exception
+            for name, original_source in original_sources.items():
+                func_def = self.spec._function_definitions.get(name)
+                if not func_def:
+                    continue
+                if isinstance(func_def, dict):
+                    func_def["url"] = original_source
+                elif hasattr(func_def, "spec"):
+                    func_def.spec.build.source = original_source
 
         if archive_code:
             files_filter = include_files or "**"
@@ -3977,7 +4021,9 @@ class MlrunProject(ModelObj):
                 fpath = f.name if remote_file else filepath
                 with zipfile.ZipFile(fpath, "w") as zipf:
                     for file_path in glob.iglob(
-                        f"{project_dir}/{files_filter}", recursive=True
+                        f"{project_dir}/{files_filter}",
+                        recursive=True,
+                        include_hidden=True,
                     ):
                         write_path = pathlib.Path(file_path)
                         zipf.write(
@@ -6057,6 +6103,40 @@ def _set_as_current_active_project(project: MlrunProject):
     pipeline_context.set(project)
 
 
+def _download_store_artifact_for_export(
+    project_context: str,
+    store_uri: str,
+    project_name: str,
+) -> str | None:
+    """Download a store:// artifact's content into the project context for zip export.
+
+    :param project_context: Project context directory
+    :param store_uri:       The store:// URI
+    :param project_name:    Project name
+    :returns: Relative path of the downloaded file, or None on failure
+    """
+    try:
+        artifact = mlrun.datastore.get_store_resource(store_uri, project=project_name)
+        target_path = artifact.get_target_path()
+        filename = os.path.basename(target_path)
+        # Avoid collisions when different artifacts share the same filename
+        # (e.g. s3://bucket-a/funcs/handler.py vs s3://bucket-b/other/handler.py)
+        path_hash = hashlib.sha256(target_path.encode()).hexdigest()[:8]
+        name, ext = os.path.splitext(filename)
+        unique_filename = f"{name}_{path_hash}{ext}"
+        local_path = os.path.join(project_context, ".mlrun", "code", unique_filename)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        mlrun.get_dataitem(target_path).download(local_path)
+        return os.path.relpath(local_path, project_context)
+    except Exception:
+        logger.warning(
+            "Failed to download code artifact for export",
+            store_uri=store_uri,
+            project=project_name,
+        )
+        return None
+
+
 def _init_function_from_dict(
     f: dict,
     project: MlrunProject,
@@ -6087,6 +6167,22 @@ def _init_function_from_dict(
         func = new_function(
             name, image=image, kind=kind or "job", handler=handler, tag=tag
         )
+
+    elif mlrun.datastore.is_store_uri(url):
+        # store:// artifact URI — store as-is in spec.build.source, resolve at run/deploy time
+        if with_repo:
+            raise ValueError(
+                "with_repo=True is not supported with store:// artifact URIs. "
+                "The artifact already provides the code source."
+            )
+        func = new_function(
+            name,
+            image=image,
+            kind=kind or "job",
+            handler=handler,
+            tag=tag,
+        )
+        func.spec.build.source = url
 
     elif is_yaml_path(url) or url.startswith("db://") or url.startswith("hub://"):
         func = import_function(url, new_name=name)

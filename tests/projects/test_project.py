@@ -1298,6 +1298,70 @@ def test_export_to_zip(rundb_mock):
     assert mlrun.get_dataitem("memory://x.zip").stat().size
 
 
+def test_export_to_yaml_with_store_function_keeps_store_uri():
+    """export to YAML keeps store:// reference as-is."""
+    project = mlrun.new_project("test-proj", save=False)
+    project.spec.context = tempfile.mkdtemp()
+
+    project.set_function(
+        func="store://artifacts/test-proj/my_func_code",
+        name="my_func",
+        kind="job",
+        handler="main",
+    )
+
+    yaml_path = os.path.join(project.spec.context, "project.yaml")
+    project.export(yaml_path)
+
+    with open(yaml_path) as f:
+        content = f.read()
+
+    assert "store://artifacts/test-proj/my_func_code" in content
+
+
+def test_export_to_zip_with_store_function_downloads_code():
+    """export to zip downloads store:// artifact code and rewrites ref."""
+    project = mlrun.new_project("test-proj", save=False)
+    project.spec.context = tempfile.mkdtemp()
+
+    func = project.set_function(
+        func="store://artifacts/test-proj/my_func_code",
+        name="my_func",
+        kind="job",
+        handler="main",
+    )
+
+    zip_path = os.path.join(tempfile.mkdtemp(), "project.zip")
+
+    with unittest.mock.patch(
+        "mlrun.projects.project._download_store_artifact_for_export"
+    ) as mock_dl:
+        # Simulate successful download
+        mock_dl.return_value = ".mlrun/code/my_func.py"
+        # Create the dummy file so it exists in the zip
+        code_dir = os.path.join(project.spec.context, ".mlrun", "code")
+        os.makedirs(code_dir, exist_ok=True)
+        with open(os.path.join(code_dir, "my_func.py"), "w") as f:
+            f.write("def main():\n    pass\n")
+
+        project.export(zip_path)
+
+    assert os.path.exists(zip_path)
+    # After export, in-memory project should still have store:// ref
+    assert func.spec.build.source == "store://artifacts/test-proj/my_func_code"
+
+    # Verify the zip contains the downloaded code file and the rewritten project.yaml
+    with zipfile.ZipFile(zip_path, "r") as zipf:
+        names = zipf.namelist()
+        assert ".mlrun/code/my_func.py" in names
+        assert "project.yaml" in names
+
+        # Verify project.yaml inside the zip has the local path, not store://
+        yaml_content = zipf.read("project.yaml").decode()
+        assert "store://artifacts/test-proj/my_func_code" not in yaml_content
+        assert ".mlrun/code/my_func.py" in yaml_content
+
+
 def test_function_receives_project_artifact_path(rundb_mock):
     func_path = str(pathlib.Path(__file__).parent / "assets" / "handler.py")
     mlrun.mlconf.artifact_path = "/tmp"
@@ -2751,3 +2815,66 @@ def test_project_enrich_skips_none_fields():
     # `other` didn't provide status, so base.status should be preserved (same object, same state)
     assert id(base.status) == base_status_id
     assert base.status.state == "offline"
+
+
+def test_init_function_from_dict_store_uri():
+    """set_function with store:// URI stores it in spec.build.source without downloading."""
+    project = mlrun.new_project("test-proj", save=False)
+    project.spec.context = tempfile.mkdtemp()
+
+    func = project.set_function(
+        func="store://artifacts/test-proj/my_func_code",
+        name="my_func",
+        kind="job",
+        handler="main",
+    )
+
+    assert func.spec.build.source == "store://artifacts/test-proj/my_func_code"
+    assert func.spec.default_handler == "main"
+    assert func.metadata.name == "my-func"
+
+
+def test_init_function_from_dict_store_uri_with_repo_raises():
+    """store:// with with_repo=True raises ValueError."""
+    project = mlrun.new_project("test-proj", save=False)
+    project.spec.context = tempfile.mkdtemp()
+
+    with pytest.raises(ValueError, match="with_repo=True is not supported"):
+        project.set_function(
+            func="store://artifacts/test-proj/my_func_code",
+            name="my_func",
+            kind="job",
+            handler="main",
+            with_repo=True,
+        )
+
+
+def test_init_function_from_dict_store_uri_nuclio():
+    """set_function with store:// URI and kind=nuclio stores URI in spec.build.source."""
+    project = mlrun.new_project("test-proj", save=False)
+    project.spec.context = tempfile.mkdtemp()
+
+    func = project.set_function(
+        func="store://artifacts/test-proj/my_func_code",
+        name="my_serving_func",
+        kind="nuclio",
+        handler="main",
+    )
+
+    assert func.spec.build.source == "store://artifacts/test-proj/my_func_code"
+    assert func.kind == "remote"
+
+
+def test_init_function_from_dict_store_uri_serving():
+    """set_function with store:// URI and kind=serving stores URI in spec.build.source."""
+    project = mlrun.new_project("test-proj", save=False)
+    project.spec.context = tempfile.mkdtemp()
+
+    func = project.set_function(
+        func="store://artifacts/test-proj/my_func_code",
+        name="my_serving_func",
+        kind="serving",
+    )
+
+    assert func.spec.build.source == "store://artifacts/test-proj/my_func_code"
+    assert func.kind == "serving"
